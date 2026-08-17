@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+**/node_modules/
+backend/venv/
+**/venv/
+__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Build & Bundles
+dist/
+build/
+.vercel/
+
+# Environment and local configurations
+.env
+.env.local
+.env.*.local
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.one
+*.onetoc2
