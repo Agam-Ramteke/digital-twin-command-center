@@ -1,505 +1,439 @@
-"""
-Machine Simulator — Correlated telemetry generation for 5 manufacturing stations.
+"""Compatibility adapter between the Phase 1 causal models and the legacy API.
 
-The simulator runs a tick-based loop (1s interval) and maintains internal state
-for each machine.  Values are correlated: load drives current, current drives
-temperature, wear drives vibration, vibration penalises health, etc.
-
-CNC-01 has a special degradation scenario that can be triggered externally.
+The original MVP generated presentation-oriented values inside one mutable
+``SimulatorEngine``.  This adapter keeps the dashboard's REST contract alive
+while making the causal models in :mod:`simulation.causal` the sole producer of
+station telemetry.  Live Twin persistence is introduced in Phase 2.
 """
 
 from __future__ import annotations
 
-import json
-import math
-import random
-import time
-import threading
+from contextlib import suppress
 from datetime import datetime, timezone
-from typing import Dict, Optional
+import json
+import logging
+import os
+import threading
+import time
+from typing import Callable, Optional
+from uuid import uuid4
 
 try:
     import paho.mqtt.client as mqtt
+
     MQTT_AVAILABLE = True
-except ImportError:
+except ImportError:  # pragma: no cover - availability depends on deployment image
     MQTT_AVAILABLE = False
 
-from models import (
-    MachineTelemetry,
-    MachineStatus,
-    StationType,
-    FactorySummary,
-    MachineTwinState,
-    TwinComparison,
-    SimulationState,
+from domain.contracts import (
+    CommandName,
+    CommandRequest,
+    EventEnvelope,
+    FaultSeverity,
+    MachineStatus as DomainMachineStatus,
+    TelemetryPayload,
 )
+from models import (
+    FactorySummary,
+    MachineStatus,
+    MachineTelemetry,
+    MachineTwinState,
+    SimulationState,
+    TwinComparison,
+)
+from simulation.causal import CausalFactory
 
 
-# ---------------------------------------------------------------------------
-# Machine configuration baselines
-# ---------------------------------------------------------------------------
-
-MACHINE_CONFIGS = {
-    "STAMPING-01": {
-        "station": StationType.STAMPING,
-        "temp_base": 55.0,
-        "vib_base": 2.0,
-        "rpm_base": 1200,
-        "current_base": 12.0,
-        "cycle_time_base": 8.5,
-        "energy_base": 18.0,
-    },
-    "CNC-01": {
-        "station": StationType.CNC,
-        "temp_base": 65.0,
-        "vib_base": 3.2,
-        "rpm_base": 3400,
-        "current_base": 8.0,
-        "cycle_time_base": 42.0,
-        "energy_base": 24.0,
-    },
-    "WELDING-01": {
-        "station": StationType.WELDING,
-        "temp_base": 80.0,
-        "vib_base": 1.8,
-        "rpm_base": 0,
-        "current_base": 45.0,
-        "cycle_time_base": 15.0,
-        "energy_base": 35.0,
-    },
-    "INSPECTION-01": {
-        "station": StationType.INSPECTION,
-        "temp_base": 28.0,
-        "vib_base": 0.4,
-        "rpm_base": 0,
-        "current_base": 2.5,
-        "cycle_time_base": 6.0,
-        "energy_base": 5.0,
-    },
-    "PACKAGING-01": {
-        "station": StationType.PACKAGING,
-        "temp_base": 32.0,
-        "vib_base": 1.2,
-        "rpm_base": 800,
-        "current_base": 4.0,
-        "cycle_time_base": 10.0,
-        "energy_base": 8.0,
-    },
-}
-
-
-class MachineState:
-    """Internal mutable state for a single machine."""
-
-    def __init__(self, machine_id: str, config: dict):
-        self.machine_id = machine_id
-        self.config = config
-        self.station: StationType = config["station"]
-
-        # Telemetry values (start at baseline)
-        self.temperature: float = config["temp_base"]
-        self.vibration: float = config["vib_base"]
-        self.rpm: float = config["rpm_base"]
-        self.current: float = config["current_base"]
-        self.cycle_time: float = config["cycle_time_base"]
-        self.energy_kwh: float = config["energy_base"]
-
-        # Derived / cumulative
-        self.production_count: int = 0
-        self.health: float = 97.0 + random.uniform(-2, 2)
-        self.tool_wear: float = 15.0 if self.station == StationType.CNC else 0.0
-        self.anomaly_score: float = 0.05
-        self.rul_cycles: int = 900 if self.station == StationType.CNC else 0
-        self.status: MachineStatus = MachineStatus.RUNNING
-
-        # Internal state
-        self.load_factor: float = 0.5 + random.uniform(-0.1, 0.1)
-        self.fault_active: bool = False
-        self.fault_type: str = "nominal"
-        self.fault_severity: str = "Warning"
-        self.fault_ticks: int = 0
-        self.degradation_active: bool = False
-        self.degradation_ticks: int = 0
-        self.cumulative_cycles: int = 0
-
-    def reset(self):
-        """Reset to healthy baseline (used after maintenance)."""
-        cfg = self.config
-        self.temperature = cfg["temp_base"]
-        self.vibration = cfg["vib_base"]
-        self.rpm = cfg["rpm_base"]
-        self.current = cfg["current_base"]
-        self.cycle_time = cfg["cycle_time_base"]
-        self.energy_kwh = cfg["energy_base"]
-        self.health = 96.0 + random.uniform(-1, 2)
-        if self.station == StationType.CNC:
-            self.tool_wear = 15.0
-            self.rul_cycles = 900
-        self.anomaly_score = 0.05
-        self.status = MachineStatus.RUNNING
-        self.load_factor = 0.5
-        self.fault_active = False
-        self.fault_type = "nominal"
-        self.fault_severity = "Warning"
-        self.fault_ticks = 0
-        self.degradation_active = False
-        self.degradation_ticks = 0
+logger = logging.getLogger(__name__)
 
 
 class SimulatorEngine:
-    """
-    Manages all 5 machines.  Call `tick()` every second to advance simulation.
-    Thread-safe — the FastAPI server reads state while the simulator writes it.
+    """Runs causal station models and exposes the legacy dashboard interface.
+
+    This class is deliberately a temporary adapter, not the final Live Twin.
+    It owns a local simulation process only; Phase 2 will make MQTT consumers
+    and persistent Live Twins the canonical state owner.
     """
 
-    def __init__(self):
-        self._lock = threading.Lock()
-        self.machines: Dict[str, MachineState] = {}
-        self.tick_count: int = 0
-        self.running: bool = False
-        self._thread: Optional[threading.Thread] = None
-        self.cnc_degrading: bool = False
+    tick_interval_s = 1.0
+
+    def __init__(
+        self,
+        *,
+        seed: int | None = None,
+        mqtt_enabled: bool = True,
+        on_tick: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
+    ) -> None:
+        self._lock = threading.RLock()
+        self._seed = seed if seed is not None else int(os.getenv("SIMULATION_SEED", "20260919"))
+        self._run_id = os.getenv("SIMULATION_RUN_ID", f"local-{uuid4()}")
+        self._on_tick = on_tick
+        self._factory = self._new_factory()
+        self._latest: dict[str, TelemetryPayload] = {}
+        self._last_published_status: dict[str, DomainMachineStatus] = {}
+        self._last_published_fault: dict[str, str | None] = {}
+        self._last_published_production: dict[str, int] = {}
+        self.tick_count = 0
+        self.running = False
+        self._thread: threading.Thread | None = None
         self._mqtt_client: Optional[object] = None
-        self._mqtt_connected: bool = False
+        self._mqtt_connected = False
+        self._last_tick_wall_time: datetime | None = None
 
-        for mid, cfg in MACHINE_CONFIGS.items():
-            self.machines[mid] = MachineState(mid, cfg)
-
-        if MQTT_AVAILABLE:
+        if MQTT_AVAILABLE and mqtt_enabled:
             self._init_mqtt()
 
-    def _init_mqtt(self):
+    def _new_factory(self) -> CausalFactory:
+        # Runtime starts at current UTC so UI source age is meaningful. Unit
+        # tests use CausalFactory's fixed default epoch directly.
+        return CausalFactory(
+            run_id=self._run_id,
+            seed=self._seed,
+            start_at=datetime.now(timezone.utc),
+        )
+
+    # ------------------------------------------------------------------
+    # MQTT transport (canonical v1 topics + read-only migration aliases)
+    # ------------------------------------------------------------------
+
+    def _init_mqtt(self) -> None:
+        host = os.getenv("MQTT_HOST", "localhost")
+        port = int(os.getenv("MQTT_PORT", "1883"))
         try:
             try:
-                self._mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="digital_twin_simulator")
-            except Exception:
-                self._mqtt_client = mqtt.Client(client_id="digital_twin_simulator")
+                client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="digital_twin_simulator")
+            except (AttributeError, TypeError):
+                client = mqtt.Client(client_id="digital_twin_simulator")
 
-            def on_connect(client, userdata, flags, rc, properties=None):
-                if rc == 0:
-                    self._mqtt_connected = True
-                    print("[MQTT] Simulator connected to broker on port 1883")
-                    client.subscribe("factory/commands/#")
+            def on_connect(client, userdata, flags, reason_code, properties=None):
+                success = getattr(reason_code, "value", reason_code) == 0
+                self._mqtt_connected = bool(success)
+                if success:
+                    client.subscribe("factory/v1/+/command", qos=1)
+                    client.subscribe("factory/commands/#", qos=1)  # migration alias
+                    logger.info("Simulator MQTT connected to %s:%s", host, port)
                 else:
-                    self._mqtt_connected = False
+                    logger.warning("Simulator MQTT connection rejected: %s", reason_code)
 
-            def on_disconnect(client, userdata, rc, properties=None):
+            def on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
                 self._mqtt_connected = False
 
-            def on_message(client, userdata, msg):
-                try:
-                    topic = msg.topic
-                    if topic == "factory/commands/degrade_cnc":
-                        self.degrade_cnc()
-                    elif topic == "factory/commands/reset_cnc":
-                        self.reset_cnc()
-                    elif topic == "factory/commands/reset_all":
-                        self.reset_all()
-                except Exception as e:
-                    print(f"[MQTT] Error processing command: {e}")
+            def on_message(client, userdata, message):
+                self._handle_mqtt_command(message.topic, message.payload)
 
-            self._mqtt_client.on_connect = on_connect
-            self._mqtt_client.on_disconnect = on_disconnect
-            self._mqtt_client.on_message = on_message
-            self._mqtt_client.connect_async("localhost", 1883, 60)
-            self._mqtt_client.loop_start()
-        except Exception as e:
-            print(f"[MQTT] Optional MQTT broker not available ({e}). Running in standalone REST mode.")
+            client.on_connect = on_connect
+            client.on_disconnect = on_disconnect
+            client.on_message = on_message
+            client.connect_async(host, port, 60)
+            client.loop_start()
+            self._mqtt_client = client
+        except Exception as error:  # pragma: no cover - broker availability is environment-specific
+            logger.warning("MQTT unavailable; running REST-only: %s", error)
+            self._mqtt_client = None
+            self._mqtt_connected = False
 
-    # ------------------------------------------------------------------
-    # Public control API
-    # ------------------------------------------------------------------
+    def _handle_mqtt_command(self, topic: str, raw_payload: bytes) -> None:
+        """Consume canonical commands and the three original UI commands."""
 
-    def start(self):
-        """Start the background simulation loop."""
-        if self.running:
+        try:
+            if topic.startswith("factory/v1/") and topic.endswith("/command"):
+                machine_id = topic.split("/")[2]
+                payload = json.loads(raw_payload.decode("utf-8")) if raw_payload else {}
+                self._apply_command(machine_id, CommandRequest.model_validate(payload))
+                return
+
+            # These aliases let the existing web UI control a migration build.
+            legacy_command = topic.removeprefix("factory/commands/")
+            if legacy_command == "degrade_cnc":
+                self.degrade_cnc()
+            elif legacy_command == "reset_cnc":
+                self.reset_cnc()
+            elif legacy_command == "reset_all":
+                self.reset_all()
+        except Exception:
+            logger.exception("Ignoring invalid MQTT command on %s", topic)
+
+    @staticmethod
+    def _json(model: object) -> str:
+        if hasattr(model, "model_dump_json"):
+            return model.model_dump_json()  # type: ignore[no-any-return]
+        return json.dumps(model)  # pragma: no cover - Pydantic is a project dependency
+
+    def _publish(self, topic: str, payload: object, *, qos: int = 0, retain: bool = False) -> None:
+        client = self._mqtt_client
+        if not client or not self._mqtt_connected:
             return
-        self.running = True
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
-        self._thread.start()
+        with suppress(Exception):
+            client.publish(topic, self._json(payload), qos=qos, retain=retain)
 
-    def stop(self):
-        self.running = False
+    def _publish_tick(self, events: tuple[EventEnvelope, ...]) -> None:
+        for event in events:
+            sample = self._latest[event.machine_id]
+            # Canonical, versioned event topic.
+            self._publish(f"factory/v1/{event.machine_id}/telemetry", event, qos=0)
+            # Legacy raw-payload topic retained temporarily for the existing UI.
+            self._publish(f"factory/telemetry/{event.machine_id}", self._to_legacy(sample), qos=0)
 
-    def inject_fault(self, machine_id: str, fault_type: str = "default", severity: str = "Warning") -> bool:
-        """Trigger fault scenario on a specific machine."""
+            previous_status = self._last_published_status.get(event.machine_id)
+            if previous_status != sample.status:
+                self._publish(
+                    f"factory/v1/{event.machine_id}/state",
+                    {
+                        "machine_id": event.machine_id,
+                        "status": sample.status.value,
+                        "operational_state": sample.operational_state.value,
+                        "generated_at": sample.simulated_at.isoformat(),
+                    },
+                    qos=1,
+                )
+                self._last_published_status[event.machine_id] = sample.status
+
+            previous_fault = self._last_published_fault.get(event.machine_id)
+            if previous_fault != sample.fault_code:
+                self._publish(
+                    f"factory/v1/{event.machine_id}/fault",
+                    {
+                        "machine_id": event.machine_id,
+                        "fault_code": sample.fault_code,
+                        "active": sample.fault_code is not None,
+                        "generated_at": sample.simulated_at.isoformat(),
+                    },
+                    qos=1,
+                    retain=True,
+                )
+                self._last_published_fault[event.machine_id] = sample.fault_code
+
+            previous_output = self._last_published_production.get(event.machine_id, 0)
+            if sample.production_count > previous_output:
+                self._publish(
+                    f"factory/v1/{event.machine_id}/production",
+                    {
+                        "machine_id": event.machine_id,
+                        "count": sample.production_count,
+                        "quality_score": sample.quality_score,
+                        "generated_at": sample.simulated_at.isoformat(),
+                    },
+                    qos=1,
+                )
+            self._last_published_production[event.machine_id] = sample.production_count
+
+        summary = self.get_summary()
+        sim_state = self.get_simulation_state()
+        self._publish("factory/v1/system/summary", summary, qos=0)
+        self._publish("factory/summary", summary, qos=0)
+        self._publish("factory/sim/state", sim_state, qos=0)
+
+        if self._on_tick is not None:
+            with suppress(Exception):
+                self._on_tick(events)
+
+    # ------------------------------------------------------------------
+    # Simulator lifecycle and commands
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
         with self._lock:
-            m = self.machines.get(machine_id)
-            if not m:
-                return False
-            m.fault_active = True
-            m.fault_type = fault_type
-            m.fault_severity = severity
-            m.fault_ticks = 0
-            if machine_id == "CNC-01":
-                m.degradation_active = True
-                m.degradation_ticks = 0
-                self.cnc_degrading = True
-            return True
+            if self.running:
+                return
+            self.running = True
+            self._thread = threading.Thread(target=self._run_loop, name="causal-simulator", daemon=True)
+            self._thread.start()
+
+    def stop(self) -> None:
+        with self._lock:
+            self.running = False
+
+    def _run_loop(self) -> None:
+        while True:
+            with self._lock:
+                if not self.running:
+                    return
+            started = time.monotonic()
+            self.tick()
+            remaining = self.tick_interval_s - (time.monotonic() - started)
+            if remaining > 0:
+                time.sleep(remaining)
+
+    def _apply_command(self, machine_id: str, command: CommandRequest) -> None:
+        with self._lock:
+            self._factory.apply_command(machine_id, command)
+
+    def inject_fault(self, machine_id: str, fault_type: str = "injected_fault", severity: str = "Warning") -> bool:
+        if machine_id not in self._factory.models:
+            return False
+        try:
+            parsed_severity = FaultSeverity(severity)
+        except ValueError:
+            parsed_severity = FaultSeverity.WARNING
+        self._apply_command(
+            machine_id,
+            CommandRequest(
+                command=CommandName.INJECT_FAULT,
+                fault_type=fault_type,
+                severity=parsed_severity,
+            ),
+        )
+        return True
 
     def reset_machine(self, machine_id: str) -> bool:
-        """Reset a specific machine to healthy state (simulates maintenance)."""
-        with self._lock:
-            m = self.machines.get(machine_id)
-            if not m:
-                return False
-            m.reset()
-            if machine_id == "CNC-01":
-                self.cnc_degrading = False
-            return True
+        if machine_id not in self._factory.models:
+            return False
+        self._apply_command(machine_id, CommandRequest(command=CommandName.RESET))
+        return True
 
-    def degrade_cnc(self):
-        """Trigger CNC-01 degradation scenario."""
-        self.inject_fault("CNC-01", "tool_wear", "Critical")
+    def degrade_cnc(self) -> None:
+        self.inject_fault("CNC-01", "tool_wear", FaultSeverity.CRITICAL.value)
 
-    def reset_cnc(self):
-        """Simulate maintenance — reset CNC-01 to healthy state."""
+    def reset_cnc(self) -> None:
         self.reset_machine("CNC-01")
 
-    def reset_all(self):
-        """Reset entire simulation."""
+    def reset_all(self) -> None:
         with self._lock:
+            self._run_id = f"local-{uuid4()}"
+            self._factory = self._new_factory()
+            self._latest.clear()
+            self._last_published_status.clear()
+            self._last_published_fault.clear()
+            self._last_published_production.clear()
             self.tick_count = 0
-            self.cnc_degrading = False
-            for m in self.machines.values():
-                m.reset()
-                m.production_count = 0
-                m.cumulative_cycles = 0
+            self._last_tick_wall_time = None
+
+    def tick(self) -> None:
+        """Advance one real, instrumentable simulation time step."""
+
+        with self._lock:
+            tick = self._factory.tick(dt_s=self.tick_interval_s)
+            self.tick_count += 1
+            self._latest = {sample.machine_id: sample for sample in tick.telemetry}
+            self._last_tick_wall_time = datetime.now(timezone.utc)
+            events = tick.events
+        self._publish_tick(events)
 
     # ------------------------------------------------------------------
-    # Data access (thread-safe reads)
+    # Legacy REST response mapping
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _legacy_status(status: DomainMachineStatus) -> MachineStatus:
+        return MachineStatus(status.value)
+
+    def _to_legacy(self, sample: TelemetryPayload) -> MachineTelemetry:
+        wear = sample.tool_wear_percent
+        rul_cycles = int(max(0.0, (100.0 - wear) * 12.0)) if wear is not None else None
+        # The `latency_ms` field is retained for UI compatibility only. It is
+        # deliberately zero until Phase 2 observes MQTT receipt timestamps.
+        return MachineTelemetry(
+            machine_id=sample.machine_id,
+            station=sample.station.value,
+            timestamp=sample.simulated_at.isoformat(),
+            status=self._legacy_status(sample.status),
+            temperature=sample.temperature_c,
+            vibration=sample.vibration_mm_s,
+            rpm=sample.actual_rpm or 0.0,
+            current=sample.current_a,
+            production_count=sample.production_count,
+            cycle_time=sample.cycle_time_s,
+            energy_kwh=sample.energy_kwh,
+            health=sample.health_score,
+            tool_wear=wear,
+            anomaly_score=sample.anomaly_score,
+            rul_cycles=rul_cycles,
+            latency_ms=0.0,
+        )
 
     def get_telemetry(self, machine_id: str) -> Optional[MachineTelemetry]:
         with self._lock:
-            m = self.machines.get(machine_id)
-            if not m:
-                return None
-            return self._to_telemetry(m)
+            sample = self._latest.get(machine_id)
+            return self._to_legacy(sample) if sample else None
 
     def get_all_telemetry(self) -> list[MachineTelemetry]:
         with self._lock:
-            return [self._to_telemetry(m) for m in self.machines.values()]
+            return [
+                self._to_legacy(self._latest[machine_id])
+                for machine_id in self._factory.models
+                if machine_id in self._latest
+            ]
 
     def get_summary(self) -> FactorySummary:
         with self._lock:
-            machines = list(self.machines.values())
-            total_output = sum(m.production_count for m in machines)
-            total_energy = sum(m.energy_kwh for m in machines)
-            avg_health = sum(m.health for m in machines) / len(machines)
-            online = sum(1 for m in machines if m.status != MachineStatus.OFFLINE)
+            samples = list(self._latest.values())
+            if not samples:
+                return FactorySummary(
+                    oee=0.0,
+                    total_output=0,
+                    total_energy_kwh=0.0,
+                    twin_health=0.0,
+                    machines_online=0,
+                    machines_total=len(self._factory.models),
+                    data_freshness_ms=0.0,
+                    telemetry_rate=0.0,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                )
 
-            # OEE approximation: availability × performance × quality
-            availability = online / len(machines)
-            # Performance: ratio of actual cycle time to ideal
-            perf_scores = []
-            for m in machines:
-                ideal = m.config["cycle_time_base"]
-                actual = max(m.cycle_time, ideal * 0.5)
-                perf_scores.append(min(ideal / actual, 1.0))
-            performance = sum(perf_scores) / len(perf_scores)
-            quality = 0.985 - (0.002 * max(0, 50 - avg_health))  # slight degradation at low health
-            oee = round(availability * performance * quality * 100, 1)
-
+            online = sum(sample.status != DomainMachineStatus.OFFLINE for sample in samples)
+            availability = online / len(samples)
+            performance = sum(
+                min(1.0, self._factory.models[sample.machine_id].config.cycle_time_s / sample.cycle_time_s)
+                for sample in samples
+            ) / len(samples)
+            quality = sum(sample.quality_score for sample in samples) / len(samples)
+            # Before production-token flow arrives in Phase 3, min station
+            # output is a conservative line-throughput proxy—not an exact count.
+            line_output = min(sample.production_count for sample in samples)
+            freshness_ms = 0.0
+            if self._last_tick_wall_time is not None:
+                freshness_ms = max(0.0, (datetime.now(timezone.utc) - self._last_tick_wall_time).total_seconds() * 1000)
             return FactorySummary(
-                oee=oee,
-                total_output=total_output,
-                total_energy_kwh=round(total_energy, 1),
-                twin_health=round(avg_health * 0.98, 1),  # twin slightly lags
+                oee=round(availability * performance * quality * 100.0, 2),
+                total_output=line_output,
+                total_energy_kwh=round(sum(sample.energy_kwh for sample in samples), 5),
+                twin_health=round(sum(sample.health_score for sample in samples) / len(samples), 2),
                 machines_online=online,
-                machines_total=len(machines),
-                data_freshness_ms=round(random.uniform(30, 80), 1),
-                telemetry_rate=round(len(machines) * (1 + random.uniform(-0.1, 0.1)), 1),
+                machines_total=len(samples),
+                data_freshness_ms=round(freshness_ms, 2),
+                telemetry_rate=round(len(samples) / self.tick_interval_s, 2),
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
 
     def get_twin_state(self, machine_id: str) -> Optional[MachineTwinState]:
-        with self._lock:
-            m = self.machines.get(machine_id)
-            if not m:
-                return None
-            # Simulate small twin-vs-physical divergence
-            def _twin_val(physical: float, noise_pct: float = 0.01) -> float:
-                return round(physical * (1 + random.uniform(-noise_pct, noise_pct * 0.3)), 2)
+        """Temporary source-model comparison until the Phase 2 Live Twin exists.
 
-            comparisons = [
-                TwinComparison(signal="Temperature", physical=round(m.temperature, 1),
-                               twin=_twin_val(m.temperature), error=round(abs(m.temperature * random.uniform(0, 0.01)), 2), unit="°C"),
-                TwinComparison(signal="Vibration", physical=round(m.vibration, 1),
-                               twin=_twin_val(m.vibration, 0.02), error=round(abs(m.vibration * random.uniform(0, 0.02)), 2), unit="mm/s"),
-                TwinComparison(signal="RPM", physical=round(m.rpm, 0),
-                               twin=round(_twin_val(m.rpm, 0.005)), error=round(abs(m.rpm * random.uniform(0, 0.005)), 1), unit="RPM"),
-                TwinComparison(signal="Current", physical=round(m.current, 1),
-                               twin=_twin_val(m.current), error=round(abs(m.current * random.uniform(0, 0.01)), 2), unit="A"),
+        It returns zero mismatch rather than fabricated random divergence. The
+        dashboard labels will be upgraded to show live-twin receipt metrics in
+        Phase 5 once actual persistent state is present.
+        """
+
+        with self._lock:
+            sample = self._latest.get(machine_id)
+            if sample is None:
+                return None
+            values = [
+                ("Temperature", sample.temperature_c, "°C"),
+                ("Vibration", sample.vibration_mm_s, "mm/s"),
+                ("RPM", sample.actual_rpm or 0.0, "RPM"),
+                ("Current", sample.current_a, "A"),
             ]
-            sync = 100 - sum(c.error for c in comparisons) * 0.1
+            comparisons = [
+                TwinComparison(signal=name, physical=value, twin=value, error=0.0, unit=unit)
+                for name, value, unit in values
+            ]
+            freshness_ms = 0.0
+            if self._last_tick_wall_time is not None:
+                freshness_ms = max(0.0, (datetime.now(timezone.utc) - self._last_tick_wall_time).total_seconds() * 1000)
             return MachineTwinState(
                 machine_id=machine_id,
                 comparisons=comparisons,
-                sync_percent=round(max(sync, 90), 1),
-                data_freshness_ms=round(random.uniform(30, 80), 1),
-                telemetry_rate=round(1 + random.uniform(-0.1, 0.1), 1),
+                sync_percent=100.0,
+                data_freshness_ms=round(freshness_ms, 2),
+                telemetry_rate=round(1.0 / self.tick_interval_s, 2),
             )
 
     def get_simulation_state(self) -> SimulationState:
-        return SimulationState(
-            running=self.running,
-            tick=self.tick_count,
-            cnc_degrading=self.cnc_degrading,
-            scenario="CNC_DEGRADATION" if self.cnc_degrading else "NORMAL",
-        )
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _run_loop(self):
-        while self.running:
-            self.tick()
-            time.sleep(1.0)
-
-    def tick(self):
-        """Advance simulation by one step."""
         with self._lock:
-            self.tick_count += 1
-            for m in self.machines.values():
-                self._update_machine(m)
-
-            # Publish to MQTT if broker is active
-            if self._mqtt_client and self._mqtt_connected:
-                try:
-                    for m in self.machines.values():
-                        telem = self._to_telemetry(m)
-                        payload = telem.model_dump_json() if hasattr(telem, "model_dump_json") else json.dumps(telem.dict())
-                        self._mqtt_client.publish(f"factory/telemetry/{m.machine_id}", payload, qos=0)
-
-                    summary = self.get_summary()
-                    sum_payload = summary.model_dump_json() if hasattr(summary, "model_dump_json") else json.dumps(summary.dict())
-                    self._mqtt_client.publish("factory/summary", sum_payload, qos=0)
-
-                    sim_state = self.get_simulation_state()
-                    sim_payload = sim_state.model_dump_json() if hasattr(sim_state, "model_dump_json") else json.dumps(sim_state.dict())
-                    self._mqtt_client.publish("factory/sim/state", sim_payload, qos=0)
-                except Exception:
-                    pass
-
-    def _update_machine(self, m: MachineState):
-        cfg = m.config
-        noise = lambda scale=1.0: random.gauss(0, scale)
-
-        # Load oscillates naturally
-        m.load_factor += noise(0.02)
-        m.load_factor = max(0.3, min(0.9, m.load_factor))
-
-        # Fault ramp calculation
-        fault_mult = 1.0 if m.fault_severity == "Critical" else 0.65
-        if m.fault_active:
-            m.fault_ticks += 1
-            fault_factor = min(m.fault_ticks / 40.0, 1.0) * fault_mult
-        elif m.degradation_active and m.station == StationType.CNC:
-            m.degradation_ticks += 1
-            fault_factor = min(m.degradation_ticks / 60.0, 1.0)
-        else:
-            fault_factor = 0.0
-
-        # --- Station-Specific Correlated Telemetry ---
-
-        if m.station == StationType.STAMPING:
-            # Hydraulic press physics
-            load_current = cfg["current_base"] * (0.7 + 0.6 * m.load_factor) + (fault_factor * 5.2)
-            m.current = round(load_current + noise(0.2), 1)
-            temp_calc = cfg["temp_base"] + (m.load_factor - 0.5) * 6 + (fault_factor * 16.0) + (m.current - cfg["current_base"]) * 0.4
-            m.temperature = round(temp_calc + noise(0.3), 1)
-            m.vibration = round(max(0.1, cfg["vib_base"] + (m.load_factor - 0.5) * 0.4 + (fault_factor * 2.1) + noise(0.12)), 1)
-            m.rpm = round(max(500, cfg["rpm_base"] * (1 - fault_factor * 0.1) + noise(10)))
-            m.cycle_time = round(cfg["cycle_time_base"] * (1 + fault_factor * 0.35) + noise(0.2), 1)
-            m.health = round(max(15.0, min(100.0, 100.0 - fault_factor * 45 - max(0, m.vibration - cfg["vib_base"]) * 3.5 - noise(0.2))), 1)
-            m.anomaly_score = round(min(1.0, max(0.02, 0.04 + fault_factor * 0.82 + noise(0.01))), 3)
-
-        elif m.station == StationType.CNC:
-            # 5-axis milling physics
-            m.tool_wear = min(100.0, 15.0 + fault_factor * 72.0)
-            load_current = cfg["current_base"] * (0.7 + 0.6 * m.load_factor) * (1 + fault_factor * 0.35)
-            m.current = round(load_current + noise(0.2), 1)
-            temp_calc = cfg["temp_base"] + (m.load_factor - 0.5) * 8 + (m.current - cfg["current_base"]) * 0.5 + (fault_factor * 14.0)
-            m.temperature = round(temp_calc + noise(0.3), 1)
-            wear_vib = (m.tool_wear / 100.0) * 4.8
-            m.vibration = round(max(0.1, cfg["vib_base"] + wear_vib + noise(0.15)), 1)
-            m.rpm = round(max(1000, cfg["rpm_base"] * (1 - fault_factor * 0.06) + noise(15)))
-            m.rul_cycles = max(10, int(900 * (1 - m.tool_wear / 100.0)))
-            m.cycle_time = round(cfg["cycle_time_base"] * (1 + fault_factor * 0.18) + noise(0.3), 1)
-            m.health = round(max(15.0, min(100.0, 100.0 - (m.tool_wear / 100.0) * 35 - max(0, m.vibration - cfg["vib_base"]) * 3.5 - noise(0.2))), 1)
-            m.anomaly_score = round(min(1.0, max(0.02, 0.05 + fault_factor * 0.85 + noise(0.01))), 3)
-
-        elif m.station == StationType.WELDING:
-            # Robotic MIG welding cell physics
-            load_current = cfg["current_base"] * (0.7 + 0.6 * m.load_factor) + (fault_factor * (18.0 + noise(2.5)))
-            m.current = round(load_current + noise(0.4), 1)
-            temp_calc = cfg["temp_base"] + (m.load_factor - 0.5) * 8 + (fault_factor * 22.0)
-            m.temperature = round(temp_calc + noise(0.4), 1)
-            m.vibration = round(max(0.1, cfg["vib_base"] + (fault_factor * 1.6) + noise(0.1)), 1)
-            m.rpm = 0
-            m.cycle_time = round(cfg["cycle_time_base"] * (1 + fault_factor * 0.2) + noise(0.3), 1)
-            m.health = round(max(15.0, min(100.0, 100.0 - fault_factor * 48 - noise(0.3))), 1)
-            m.anomaly_score = round(min(1.0, max(0.02, 0.03 + fault_factor * 0.90 + noise(0.01))), 3)
-
-        elif m.station == StationType.INSPECTION:
-            # Laser CMM scanning physics
-            load_current = cfg["current_base"] * (0.8 + 0.4 * m.load_factor) + (fault_factor * 1.8)
-            m.current = round(load_current + noise(0.1), 1)
-            temp_calc = cfg["temp_base"] + (m.load_factor - 0.5) * 3 + (fault_factor * 7.5)
-            m.temperature = round(temp_calc + noise(0.2), 1)
-            m.vibration = round(max(0.05, cfg["vib_base"] + (fault_factor * 0.85) + noise(0.05)), 1)
-            m.rpm = 0
-            m.cycle_time = round(cfg["cycle_time_base"] * (1 + fault_factor * 0.65) + noise(0.2), 1)
-            m.health = round(max(20.0, min(100.0, 100.0 - fault_factor * 42 - noise(0.2))), 1)
-            m.anomaly_score = round(min(1.0, max(0.02, 0.05 + fault_factor * 0.94 + noise(0.01))), 3)
-
-        elif m.station == StationType.PACKAGING:
-            # Palletizer conveyor physics
-            load_current = cfg["current_base"] * (0.7 + 0.6 * m.load_factor) + (fault_factor * 5.0)
-            m.current = round(load_current + noise(0.2), 1)
-            temp_calc = cfg["temp_base"] + (m.load_factor - 0.5) * 6 + (fault_factor * 15.0)
-            m.temperature = round(temp_calc + noise(0.3), 1)
-            m.vibration = round(max(0.1, cfg["vib_base"] + (fault_factor * 2.0) + noise(0.12)), 1)
-            m.rpm = round(max(250, cfg["rpm_base"] * (1 - fault_factor * 0.28) + noise(10)))
-            m.cycle_time = round(cfg["cycle_time_base"] * (1 + fault_factor * 0.3) + noise(0.2), 1)
-            m.health = round(max(15.0, min(100.0, 100.0 - fault_factor * 46 - noise(0.2))), 1)
-            m.anomaly_score = round(min(1.0, max(0.02, 0.04 + fault_factor * 0.84 + noise(0.01))), 3)
-
-        # Status determination
-        if fault_factor > 0.45:
-            m.status = MachineStatus.DEGRADED
-        elif fault_factor > 0.15:
-            m.status = MachineStatus.WARNING
-        else:
-            m.status = MachineStatus.RUNNING
-
-        # Energy calculation
-        m.energy_kwh = round(cfg["energy_base"] * (0.8 + 0.4 * m.load_factor) + (m.current / cfg["current_base"]) * 1.5 + noise(0.2), 1)
-
-        # Production cycles
-        m.cumulative_cycles += 1
-        cycle_ticks = max(1, int(m.cycle_time))
-        if m.cumulative_cycles % max(1, cycle_ticks // 3) == 0:
-            m.production_count += 1
-
-    def _to_telemetry(self, m: MachineState) -> MachineTelemetry:
-        return MachineTelemetry(
-            machine_id=m.machine_id,
-            station=m.station,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            status=m.status,
-            temperature=round(m.temperature, 1),
-            vibration=round(m.vibration, 1),
-            rpm=round(m.rpm),
-            current=round(m.current, 1),
-            production_count=m.production_count,
-            cycle_time=round(m.cycle_time, 1),
-            energy_kwh=round(m.energy_kwh, 1),
-            health=min(100.0, max(0.0, round(m.health, 1))),
-            tool_wear=min(100.0, max(0.0, round(m.tool_wear, 1))) if m.station == StationType.CNC else None,
-            anomaly_score=min(1.0, max(0.0, round(m.anomaly_score, 3))),
-            rul_cycles=m.rul_cycles if m.station == StationType.CNC else None,
-            latency_ms=round(random.uniform(20, 60), 1),
-        )
+            cnc = self._factory.models["CNC-01"]
+            return SimulationState(
+                running=self.running,
+                tick=self.tick_count,
+                cnc_degrading=cnc.fault_active,
+                scenario="CNC_DEGRADATION" if cnc.fault_active else "NORMAL",
+            )

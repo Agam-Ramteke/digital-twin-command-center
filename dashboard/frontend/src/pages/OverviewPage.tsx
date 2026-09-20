@@ -73,7 +73,7 @@ function FleetExecutiveStrip({ summary, machines }: { summary: FactorySummary | 
           unit="%"
           targetValue={95}
           anomalyScore={maxAnomaly}
-          subtext={`Twin sync: ${summary.twin_health}% | Peak Anomaly: ${maxAnomaly.toFixed(3)}`}
+          subtext={`Twin synchronization: ${summary.twin_health}% | Vibration: ${avgVibration.toFixed(2)} mm/s`}
           size={130}
         />
       </div>
@@ -129,7 +129,7 @@ function ProductionFlowGrid({
       <div className="production-flow-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Line Architecture: 5-Stage Automotive Process</span>
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 'normal' }}>
-          Click any station for deep-dive diagnostics & calibrated telemetry
+          Select station for diagnostics
         </span>
       </div>
 
@@ -152,19 +152,14 @@ function ProductionFlowGrid({
                 onClick={() => onNavigate(mid)}
               >
                 <div className="node-header">
-                  <div>
-                    <span className="node-name">{mid}</span>
-                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
-                      {station.toLowerCase()}
-                    </div>
-                  </div>
+                  <span className="node-name">{mid}</span>
                   <span className={`node-status ${status}`}>
                     <span className="status-dot" />
                     {status}
                   </span>
                 </div>
 
-                <div className="node-metrics" style={{ marginTop: 6, paddingTop: 6 }}>
+                <div className="node-metrics" style={{ marginTop: 8, paddingTop: 6 }}>
                   <div>
                     <div className="node-metric-label">Health</div>
                     <div className="node-metric-value" style={{ color: (m?.health ?? 100) < 70 ? 'var(--status-error)' : 'var(--text-primary)' }}>
@@ -183,12 +178,6 @@ function ProductionFlowGrid({
                     <div className="node-metric-label">Output</div>
                     <div className="node-metric-value">{m ? `${m.production_count} pcs` : '—'}</div>
                   </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-                  <span style={{ fontSize: 10, color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: 2, fontWeight: 600 }}>
-                    Inspect Station <ChevronRight size={10} />
-                  </span>
                 </div>
               </div>
             </div>
@@ -405,44 +394,10 @@ function FleetDiagnosticsPanel({ machines, onNavigate }: { machines: MachineTele
 }
 
 /* =================================================================
-   6. Status Strip Footer
-   ================================================================= */
-function StatusStrip({ summary, connected, isMqtt }: { summary: FactorySummary | null; connected: boolean; isMqtt: boolean }) {
-  return (
-    <div className="status-strip">
-      <div className="status-strip-item">
-        <span className="strip-label">Data Freshness</span>
-        <span className="strip-value">{summary ? `${summary.data_freshness_ms.toFixed(0)} ms` : '—'}</span>
-      </div>
-      <div className="status-strip-item">
-        <span className="strip-label">Telemetry</span>
-        <span className="strip-value">{summary ? `${summary.telemetry_rate} msg/s` : '—'}</span>
-      </div>
-      <div className="status-strip-item">
-        <span className="strip-label">Active Twins</span>
-        <span className="strip-value">{summary ? `${summary.machines_online} / ${summary.machines_total}` : '—'}</span>
-      </div>
-      <div className="status-strip-item">
-        <span className="strip-label">Protocol</span>
-        <span className="strip-value" style={{ color: isMqtt ? 'var(--status-good)' : 'var(--accent-blue)', fontWeight: 'bold' }}>
-          {isMqtt ? 'MQTT LIVE' : 'REST POLLING'}
-        </span>
-      </div>
-      <div className="status-strip-item">
-        <span className="strip-label">Backend</span>
-        <span className={`strip-value ${connected ? 'connected' : ''}`}>
-          {connected ? 'ONLINE / SYNCHRONIZED' : 'OFFLINE'}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/* =================================================================
    Main Overview Page Component
    ================================================================= */
 export default function OverviewPage() {
-  const { data: machines, connected, isMqtt } = useMachines(1000);
+  const { data: machines } = useMachines(1000);
   const { data: summary } = useSummary(1000);
   const navigate = useNavigate();
 
@@ -489,9 +444,6 @@ export default function OverviewPage() {
 
       {/* Root Cause Analysis & Line-wide Control */}
       <FleetDiagnosticsPanel machines={machines ?? []} onNavigate={handleNavigate} />
-
-      {/* Bottom Telemetry Status Strip */}
-      <StatusStrip summary={summary} connected={connected} isMqtt={isMqtt} />
     </>
   );
 }

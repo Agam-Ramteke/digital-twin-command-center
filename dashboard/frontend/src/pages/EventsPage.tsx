@@ -134,8 +134,7 @@ export default function EventsPage() {
           <thead>
             <tr>
               <th>Time</th>
-              <th>Machine</th>
-              <th>Station</th>
+              <th>Station / Machine</th>
               <th>Type</th>
               <th>Severity</th>
               <th>Description</th>
@@ -148,8 +147,10 @@ export default function EventsPage() {
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
                   {new Date(e.timestamp).toLocaleTimeString('en-GB', { hour12: false })}
                 </td>
-                <td className="table-machine-id">{e.machine_id}</td>
-                <td>{e.station}</td>
+                <td className="table-machine-id">
+                  <div>{e.machine_id}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 'normal' }}>{e.station}</div>
+                </td>
                 <td>{e.type}</td>
                 <td>
                   <span className={`status-badge ${e.severity === 'Error' ? 'degraded' : e.severity === 'Warning' ? 'warning' : 'running'}`}>

@@ -20,8 +20,7 @@ export default function MachinesPage() {
         <table className="machine-table">
           <thead>
             <tr>
-              <th>Machine</th>
-              <th>Station</th>
+              <th>Station / Machine</th>
               <th>Status</th>
               <th>Health</th>
               <th>Cycle</th>
@@ -36,8 +35,10 @@ export default function MachinesPage() {
               const statusClass = m.status.toLowerCase();
               return (
                 <tr key={m.machine_id} onClick={() => navigate(`/machines/${m.machine_id}`)}>
-                  <td className="table-machine-id">{m.machine_id}</td>
-                  <td>{m.station}</td>
+                  <td className="table-machine-id">
+                    <div>{m.machine_id}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 'normal' }}>{m.station}</div>
+                  </td>
                   <td><span className={`status-badge ${statusClass}`}>{m.status}</span></td>
                   <td>{m.health}%</td>
                   <td>{m.cycle_time}s</td>

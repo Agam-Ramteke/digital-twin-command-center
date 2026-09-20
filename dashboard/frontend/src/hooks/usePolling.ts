@@ -3,7 +3,18 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api } from '../services/api';
 import { useMqtt } from './useMqtt';
-import type { MachineTelemetry, FactorySummary, MachineTwinState, SimulationState } from '../types';
+import type {
+  MachineTelemetry,
+  FactorySummary,
+  MachineTwinState,
+  SimulationState,
+  SystemReadiness,
+  TwinDocument,
+  BottleneckReport,
+  ProcessTwinView,
+  ProductionToken,
+  DefectAttributionReport,
+} from '../types';
 
 /** Generic polling hook with MQTT overlay. */
 function usePoll<T>(fetcher: () => Promise<T>, intervalMs = 1000) {
@@ -172,3 +183,42 @@ export function useTelemetryHistory(machineId: string, maxPoints = 60) {
 
   return history;
 }
+
+/** Hook to monitor system readiness and service health from /ready. */
+export function useSystemReadiness(intervalMs = 2000) {
+  return usePoll<SystemReadiness>(() => api.getReadiness(), intervalMs);
+}
+
+/** Hook to fetch all persistent Live Twin documents from /api/v1/twins. */
+export function useLiveTwins(intervalMs = 1000) {
+  return usePoll<TwinDocument[]>(() => api.getLiveTwins(), intervalMs);
+}
+
+/** Hook to fetch a single persistent Live Twin document from /api/v1/twins/{id}. */
+export function useLiveTwin(machineId: string, intervalMs = 1000) {
+  const fetcher = useCallback(() => api.getLiveTwin(machineId), [machineId]);
+  return usePoll<TwinDocument>(fetcher, intervalMs);
+}
+
+/** Hook to poll the DAG bottleneck analysis from /api/v1/process/bottleneck. */
+export function useProcessBottleneck(intervalMs = 2000) {
+  return usePoll<BottleneckReport>(() => api.getProcessBottleneck(), intervalMs);
+}
+
+/** Hook to poll the composite Process Twin view from /api/v1/process/view. */
+export function useProcessView(intervalMs = 2000) {
+  return usePoll<ProcessTwinView>(() => api.getProcessView(), intervalMs);
+}
+
+/** Hook to poll discrete production tokens flowing through the DAG pipeline. */
+export function useProductionTokens(intervalMs = 2000, limit = 25) {
+  const fetcher = useCallback(() => api.listProductionTokens({ limit }), [limit]);
+  return usePoll<ProductionToken[]>(fetcher, intervalMs);
+}
+
+/** Hook to poll upstream defect root-cause tracing from /api/v1/process/defects/trace. */
+export function useDefectTrace(intervalMs = 3000, limit = 50) {
+  const fetcher = useCallback(() => api.traceDefects(limit), [limit]);
+  return usePoll<DefectAttributionReport>(fetcher, intervalMs);
+}
+
