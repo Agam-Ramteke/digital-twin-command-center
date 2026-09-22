@@ -30,8 +30,13 @@ export function useMqtt() {
       try {
         // Connect to Mosquitto WebSocket listener on port 9001
         const connectFn = (mqtt as any).connect || (mqtt as any).default?.connect || (mqtt as any).default;
+        const wsUrl = import.meta.env.VITE_MQTT_WS_URL ?? 'ws://localhost:9001';
+        if (wsUrl === 'none' || wsUrl === 'disabled') {
+          setStatusText('Offline');
+          return;
+        }
         if (typeof connectFn === 'function') {
-          const client = connectFn('ws://localhost:9001', {
+          const client = connectFn(wsUrl, {
             clientId: `web_${Math.random().toString(16).substring(2, 8)}`,
             clean: true,
             connectTimeout: 4000,

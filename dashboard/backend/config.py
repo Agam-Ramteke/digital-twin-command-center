@@ -18,6 +18,10 @@ class Settings:
     mqtt_host: str
     mqtt_port: int
     mqtt_live_twin_enabled: bool
+    aws_profile: str = "Agam"
+    aws_region: str = "ap-south-1"
+    bedrock_fast_model: str = "in.openai.gpt-5.6-luna"
+    bedrock_reasoning_model: str = "global.openai.gpt-6-astra"
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -32,4 +36,8 @@ class Settings:
             mqtt_port=int(os.getenv("MQTT_PORT", "1883")),
             mqtt_live_twin_enabled=os.getenv("MQTT_LIVE_TWIN_ENABLED", "true").lower()
             in {"1", "true", "yes"},
+            aws_profile=os.getenv("AWS_PROFILE", "Agam"),
+            aws_region=os.getenv("AWS_REGION", "ap-south-1"),
+            bedrock_fast_model=os.getenv("AWS_BEDROCK_FAST_MODEL", "in.openai.gpt-5.6-luna"),
+            bedrock_reasoning_model=os.getenv("AWS_BEDROCK_REASONING_MODEL", "global.openai.gpt-6-astra"),
         )

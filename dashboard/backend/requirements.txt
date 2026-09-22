@@ -3,3 +3,7 @@ uvicorn[standard]==0.30.0
 pydantic==2.9.0
 paho-mqtt==2.1.0
 pymongo==4.10.1
+boto3>=1.35.0
+awscrt>=0.21.0
+dnspython>=2.6.0
+

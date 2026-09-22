@@ -27,6 +27,7 @@ from domain.contracts import (
 )
 from repositories.factory import create_scenario_repository, create_twin_repository
 from services import (
+    BedrockService,
     LiveTwinMqttConsumer,
     LiveTwinService,
     ProcessTwinService,
@@ -46,6 +47,12 @@ scenario_worker_service = ScenarioWorkerService(
     process_twin_service=process_twin_service,
     live_twin_service=live_twin_service,
     scenario_repository=scenario_repository,
+)
+bedrock_service = BedrockService(
+    profile_name=settings.aws_profile,
+    region_name=settings.aws_region,
+    fast_model_id=settings.bedrock_fast_model,
+    reasoning_model_id=settings.bedrock_reasoning_model,
 )
 live_twin_consumer = LiveTwinMqttConsumer(
     live_twin_service,
@@ -396,3 +403,66 @@ def reset_all():
     """Reset entire simulation to initial state."""
     engine.reset_all()
     return {"status": "reset"}
+
+
+# ---------------------------------------------------------------------------
+# AWS Bedrock AI Diagnostics & Reasoning Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/api/ai/ask")
+def ask_ai(payload: dict):
+    """Interactive AI query endpoint supporting fast (Luna) and reasoning (Astra/Claude) models."""
+    prompt = payload.get("prompt")
+    if not prompt:
+        raise HTTPException(400, "Missing 'prompt' in request body")
+    model_id = payload.get("model_id")
+    system_prompt = payload.get(
+        "system_prompt",
+        "You are an expert AI industrial engineer for the factory digital twin platform.",
+    )
+    try:
+        reply = bedrock_service.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_id=model_id,
+        )
+        return {
+            "prompt": prompt,
+            "response": reply,
+            "model_id": model_id or bedrock_service.fast_model_id,
+        }
+    except Exception as exc:
+        raise HTTPException(502, f"Bedrock invocation failed: {exc}")
+
+
+@app.post("/api/ai/diagnose-bottlenecks")
+def diagnose_bottlenecks():
+    """Deep causal diagnosis of active factory bottlenecks using reasoning model."""
+    try:
+        bottleneck_data = process_twin_service.get_bottlenecks().model_dump()
+        machines = [m.model_dump() for m in engine.get_all_machines()]
+        analysis = bedrock_service.diagnose_bottleneck(bottleneck_data, machines)
+        return {
+            "model_id": bedrock_service.reasoning_model_id,
+            "analysis": analysis,
+            "bottlenecks": bottleneck_data,
+        }
+    except Exception as exc:
+        raise HTTPException(502, f"AI bottleneck diagnosis failed: {exc}")
+
+
+@app.post("/api/ai/scenario-insights/{scenario_id}")
+def get_scenario_ai_insights(scenario_id: str):
+    """Generate deep engineering insights for a finished scenario fork."""
+    scenario = scenario_repository.get_scenario(scenario_id)
+    if not scenario:
+        raise HTTPException(404, f"Scenario {scenario_id} not found")
+    try:
+        insights = bedrock_service.explain_scenario(scenario.model_dump())
+        return {
+            "scenario_id": scenario_id,
+            "model_id": bedrock_service.reasoning_model_id,
+            "insights": insights,
+        }
+    except Exception as exc:
+        raise HTTPException(502, f"AI scenario analysis failed: {exc}")
+

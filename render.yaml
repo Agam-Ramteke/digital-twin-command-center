@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: digital-twin-backend
+    env: python
+    rootDir: dashboard/backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PERSISTENCE_BACKEND
+        value: mongo
+      - key: MONGODB_DATABASE
+        value: digital_twin
+      - key: MQTT_LIVE_TWIN_ENABLED
+        value: "false"
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: MONGODB_URI
+        sync: false
