@@ -36,6 +36,7 @@ from repositories.scenario_repository import ScenarioRepository
 from services.live_twin import LiveTwinService
 from services.process_twin import ProcessTwinService
 from simulation.causal import CausalFactory, clamp
+from services.scenario_reasoning import ScenarioReasoningService
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +44,62 @@ from simulation.causal import CausalFactory, clamp
 # ---------------------------------------------------------------------------
 
 PRESET_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "cnc_double_speed": {
+        "name": "Double CNC Speed (2.0x Cadence / 21s)",
+        "description": "Run CNC-01 at 200% feed/spindle speed. Cuts CNC cycle time from 42s to 21s, doubling throughput at the expense of accelerated tool wear.",
+        "overrides": [
+            StationOverride(
+                machine_id="CNC-01",
+                cycle_time_multiplier=0.50,
+                load_factor=0.90,
+            )
+        ],
+    },
+    "cnc_parallel_cell": {
+        "name": "Add 2nd CNC in Parallel (Dual-CNC Cell)",
+        "description": "Simulate adding a duplicate CNC milling station in parallel. Divides cycle time across 2 machines (effective 21s) without tool wear or thermal penalty.",
+        "overrides": [
+            StationOverride(
+                machine_id="CNC-01",
+                cycle_time_multiplier=0.50,
+                load_factor=0.55,
+            )
+        ],
+    },
+    "cnc_triple_speed_shift": {
+        "name": "Triple CNC Speed (14s) - Bottleneck Shift",
+        "description": "Run CNC at 300% speed (14s). Drops CNC below Welding (15s), causing the line bottleneck to shift to WELDING-01.",
+        "overrides": [
+            StationOverride(
+                machine_id="CNC-01",
+                cycle_time_multiplier=0.333,
+                load_factor=0.98,
+            )
+        ],
+    },
+    "line_cadence_derate": {
+        "name": "Paced Derate (-20% Speed for Tool Preservation)",
+        "description": "Slow CNC cadence to 52.5s. Cools spindle temperature, dampens chatter, and extends tool life to complete the shift.",
+        "overrides": [
+            StationOverride(
+                machine_id="CNC-01",
+                cycle_time_multiplier=1.25,
+                load_factor=0.45,
+            )
+        ],
+    },
+    "cnc_unplanned_outage": {
+        "name": "15-Minute Unplanned CNC Outage (Line Ripple)",
+        "description": "Simulate sudden CNC spindle seizure. Evaluates buffer exhaustion: Stamping blocks in 42s and Welding starves in 75s.",
+        "overrides": [
+            StationOverride(
+                machine_id="CNC-01",
+                fault_type="spindle_seizure",
+                fault_severity=FaultSeverity.CRITICAL,
+                cycle_time_multiplier=5.0,
+            )
+        ],
+    },
     "preventive_tool_change": {
         "name": "Preventive CNC Tool Change",
         "description": "Simulate immediate tool replacement at CNC-01 to prevent impending failure and restore cutting quality.",
@@ -223,6 +280,12 @@ class ScenarioWorkerService:
             trajectory=trajectory,
         )
 
+        try:
+            reasoning_service = ScenarioReasoningService()
+            result.decision_analysis = reasoning_service.analyze_scenario(result, snapshot=snapshot)
+        except Exception:
+            pass
+
         self._scenario_repository.save(result)
         return result
 
@@ -337,6 +400,8 @@ class ScenarioWorkerService:
                     avg_cycle_time_s=round(avg_cycle, 2),
                     avg_quality_score=round(avg_quality, 4),
                     fault_occurred=fault_occurred,
+                    final_temperature_c=round(final_sample.temperature_c, 2) if final_sample else None,
+                    final_tool_wear_percent=round(final_sample.tool_wear_percent, 2) if (final_sample and final_sample.tool_wear_percent is not None) else None,
                 )
             )
 

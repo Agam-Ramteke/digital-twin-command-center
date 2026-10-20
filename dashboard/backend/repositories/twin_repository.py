@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Protocol
 
-from domain.contracts import EventEnvelope, TwinDocument
+from domain.contracts import EventEnvelope, ProductionToken, TwinDocument
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,20 @@ class TwinRepository(Protocol):
 
     def list_telemetry(self, machine_id: str, *, limit: int = 100) -> list[EventEnvelope]: ...
 
+    def list_events(self, *, limit: int = 100, machine_id: str | None = None) -> list[EventEnvelope]: ...
+
+    def save_token(self, token: ProductionToken) -> None: ...
+
+    def get_token(self, token_id: str) -> ProductionToken | None: ...
+
+    def list_tokens(
+        self,
+        *,
+        limit: int = 50,
+        quality: str | None = None,
+        station: str | None = None,
+    ) -> list[ProductionToken]: ...
+
     def close(self) -> None: ...
 
 
@@ -48,6 +62,7 @@ class InMemoryTwinRepository:
         self._twins: dict[str, TwinDocument] = {}
         self._events: dict[str, EventEnvelope] = {}
         self._telemetry_by_machine: dict[str, list[str]] = {}
+        self._tokens: dict[str, ProductionToken] = {}
 
     def get_twin(self, machine_id: str) -> TwinDocument | None:
         with self._lock:
@@ -85,6 +100,42 @@ class InMemoryTwinRepository:
         with self._lock:
             event_ids = self._telemetry_by_machine.get(machine_id, [])[-limit:]
             return [self._events[event_id] for event_id in reversed(event_ids)]
+
+    def list_events(self, *, limit: int = 100, machine_id: str | None = None) -> list[EventEnvelope]:
+        if limit < 1 or limit > 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        with self._lock:
+            events = list(self._events.values())
+            if machine_id:
+                events = [e for e in events if e.machine_id == machine_id]
+            events.sort(key=lambda e: e.generated_at, reverse=True)
+            return events[:limit]
+
+    def save_token(self, token: ProductionToken) -> None:
+        with self._lock:
+            self._tokens[token.token_id] = token
+
+    def get_token(self, token_id: str) -> ProductionToken | None:
+        with self._lock:
+            return self._tokens.get(token_id)
+
+    def list_tokens(
+        self,
+        *,
+        limit: int = 50,
+        quality: str | None = None,
+        station: str | None = None,
+    ) -> list[ProductionToken]:
+        if limit < 1 or limit > 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        with self._lock:
+            tokens = list(self._tokens.values())
+            if quality:
+                tokens = [t for t in tokens if t.quality == quality]
+            if station:
+                tokens = [t for t in tokens if station in t.lineage]
+            tokens.sort(key=lambda t: t.emitted_at, reverse=True)
+            return tokens[:limit]
 
     def close(self) -> None:
         """Kept for protocol symmetry; no resources are held."""

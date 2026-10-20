@@ -14,6 +14,9 @@ export interface MachineTelemetry {
   rpm: number;
   current: number;
   production_count: number;
+  wip_count?: number;
+  is_starved?: boolean;
+  is_blocked?: boolean;
   cycle_time: number;
   energy_kwh: number;
   health: number;
@@ -42,6 +45,7 @@ export interface MachineTwinState {
 export interface FactorySummary {
   oee: number;
   total_output: number;
+  total_wip?: number;
   total_energy_kwh: number;
   twin_health: number;
   machines_online: number;
@@ -92,6 +96,8 @@ export interface StationOutcome {
   avg_cycle_time_s: number;
   avg_quality_score: number;
   fault_occurred: boolean;
+  final_temperature_c?: number;
+  final_tool_wear_percent?: number;
 }
 
 export interface LineOutcome {
@@ -128,6 +134,7 @@ export interface TrajectorySample {
 }
 
 export interface ScenarioRunResult {
+  decision_analysis?: ScenarioDecisionAnalysis | null;
   scenario_id: string;
   name: string;
   description: string | null;
@@ -181,6 +188,8 @@ export interface HealthState {
 
 export interface ProductionState {
   cumulative_output: number;
+  wip_count?: number;
+  is_starved?: boolean;
   latest_quality_score: number;
   latest_token_id: string | null;
 }
@@ -224,6 +233,9 @@ export interface TelemetryPayload {
   cycle_time_s: number;
   energy_kwh: number;
   production_count: number;
+  wip_count?: number;
+  is_starved?: boolean;
+  is_blocked?: boolean;
   health_score: number;
   anomaly_score: number;
   quality_score: number;
@@ -372,3 +384,59 @@ export interface SystemReadiness {
 }
 
 
+
+export interface DecisionStrategy {
+  strategy_id: string;
+  name: string;
+  strategy_type: 'fix_now' | 'derate_finish' | 'status_quo' | 'custom' | string;
+  action_label: string;
+  projected_output: number;
+  scrap_count: number;
+  downtime_minutes: number;
+  total_cost_usd: number;
+  scrap_cost_usd: number;
+  downtime_cost_usd: number;
+  tooling_cost_usd: number;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string;
+  quota_met: boolean;
+  is_recommended: boolean;
+  recommendation_reason: string;
+}
+
+export interface WorkerWorkOrder {
+  work_order_id: string;
+  target_machine_id: string;
+  station_name: string;
+  priority: 'URGENT' | 'SCHEDULED' | 'DEFERRED' | string;
+  estimated_duration_min: number;
+  optimal_window_description: string;
+  required_tools_and_parts: string[];
+  safety_loto_steps: string[];
+  sop_procedure_steps: string[];
+  post_maintenance_verification: string[];
+}
+
+export interface ManagerExecutiveBrief {
+  recommended_strategy_name: string;
+  recommended_action: string;
+  financial_advantage_usd: number;
+  shift_quota_target: number;
+  shift_quota_feasible: boolean;
+  risk_assessment: string;
+  key_tradeoff_summary: string;
+  ai_reasoning_narrative: string;
+}
+
+export interface ScenarioDecisionAnalysis {
+  scenario_id: string;
+  analyzed_at: string;
+  target_machine_id: string;
+  current_health_percent: number;
+  active_anomaly: string;
+  recommended_strategy_id: string;
+  financial_advantage_usd: number;
+  manager_brief: ManagerExecutiveBrief;
+  worker_order: WorkerWorkOrder;
+  strategies: DecisionStrategy[];
+  llm_prompt_template?: string | null;
+}

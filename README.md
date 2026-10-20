@@ -122,7 +122,7 @@ The Live Twin maintains a single source of truth (`TwinDocument`) for every mach
   - `source_age_ms`: Current wall time minus original sensor timestamp.
 
 ### 2.4 Persistence Layer
-**Location:** `backend/services/twin_repository.py`
+**Location:** `dashboard/backend/repositories/twin_repository.py`
 
 Data persistence is abstracted through a clean repository pattern:
 
@@ -169,16 +169,17 @@ Provides predictive forward simulation without disrupting live production:
 A high-density React 19 + TypeScript web application built with Vite:
 
 - **Live-First Architecture**: Connects directly to FastAPI and Mosquitto without mock fallbacks.
-- **8 Dedicated Views**:
-  1. `Overview`: Plant OEE, Asset Integrity dial gauges, 5-station status flow, real-time multi-machine health trajectory, root-cause diagnostic matrix, and quick fault injection.
-  2. `Production`: Sequential DAG balancing, binding constraint highlight, live production token stream, token inspection drawer, and defect attribution analysis.
-  3. `Digital Twin`: What-If Scenario Studio, intervention selector, comparative run table, live twin registry with sequence IDs, and DAG hierarchy.
-  4. `Machines`: High-density station telemetry table with combined Station/Machine column, anomaly scores, health, and output.
-  5. `Machine Detail`: Station deep-dive with calibrated gauges, ISO baselines & tolerances, 4-metric historical sparklines with normal distributions, and fault injection/reset controls.
-  6. `Predictive Maintenance`: Machine health, remaining useful life (RUL) cycle estimates, condition assessment, and recommended operator actions.
-  7. `Analytics`: Multi-station comparison tabs (Production, Energy, Health, Cycle Time) and rolling plant power consumption.
-  8. `Events`: Centralized plant event log with severity filtering, machine filtering, and full-text search.
-  9. `System`: Infrastructure health for all 8 microservices and synchronization latency measurements.
+- **10 Dedicated Industrial Views**:
+  1. `Overview`: Plant OEE, Apple Activity Rings, Text-Morphing telemetry cards, Asset Integrity dial gauges, 5-station status flow, real-time multi-machine health trajectory, root-cause diagnostic matrix, and quick fault injection.
+  2. `3D Virtual Factory`: Interactive Three.js WebGL factory floor with realistic industrial machines, live physics workpiece conveyor flow synchronized with actual parts produced, orbital camera presets, HUD telemetry, and station inspection drawer.
+  3. `Production`: Sequential DAG balancing, binding constraint highlight, live production token stream, token inspection drawer, and defect attribution analysis.
+  4. `Digital Twin`: What-If Scenario Studio, intervention selector, comparative run table, live twin registry with sequence IDs, and DAG hierarchy.
+  5. `Machines`: High-density station telemetry table with combined Station/Machine column, anomaly scores, health, and output.
+  6. `Machine Detail`: Station deep-dive with calibrated gauges, ISO baselines & tolerances, 4-metric historical sparklines with normal distributions, and fault injection/reset controls.
+  7. `Predictive Maintenance`: Fleet Asset Health & RUL forecast, target station selector, Plant Manager Executive Brief (financial delta in $USD, quota feasibility, and risk narrative), Field Technician SOP Work Orders (step-by-step protocol, OSHA LOTO steps, required tools), and Multi-Strategy Comparative Tradeoff Matrix.
+  8. `Analytics`: Multi-station comparison tabs (Production, Energy, Health, Cycle Time) and rolling plant power consumption.
+  9. `Events`: Centralized plant event log with severity filtering, machine filtering, and full-text search.
+  10. `System`: Infrastructure health for all microservices and synchronization latency measurements.
 
 ---
 
@@ -205,29 +206,58 @@ A high-density React 19 + TypeScript web application built with Vite:
 - `GET /api/v1/twins`: List all active machine twin documents.
 - `GET /api/v1/twins/{machine_id}`: Retrieve current state document for a specific machine.
 - `GET /api/v1/twins/{machine_id}/telemetry?limit=60`: Time-series sensor history.
+- `GET /api/v1/events?limit=100`: List newest-first persistent plant event envelopes.
+- `POST /api/v1/events`: Ingest transport event envelope into the Live Twin reducer.
 
 ### Process Twin & Lineage
 - `GET /api/v1/process/topology`: DAG node and edge topology.
 - `GET /api/v1/process/view`: Process-level snapshot including active tokens and station utilization.
 - `GET /api/v1/process/bottleneck`: Detailed bottleneck analysis, binding station, and slack times.
 - `GET /api/v1/process/tokens?limit=30`: List recent production tokens and lineage.
-- `POST /api/v1/process/tokens/emit`: Manually inject a production token into the DAG.
-- `GET /api/v1/process/defects?limit=50`: Defect incident list and upstream station attribution.
+- `POST /api/v1/process/tokens`: Manually inject a production token into the DAG.
+- `GET /api/v1/process/defects/trace?limit=50`: Defect incident list and upstream station attribution.
 
 ### Scenario Worker (What-If)
 - `GET /api/v1/scenarios/presets`: List available intervention presets.
 - `POST /api/v1/scenarios/run`: Execute an isolated counterfactual forward simulation from an immutable snapshot.
 - `GET /api/v1/scenarios`: List historical scenario results.
+- `GET /api/v1/scenarios/strategies`: Multi-strategy decision optimization and trade-off analysis for plant managers and line workers.
+- `POST /api/v1/scenarios/analyze`: Synthesize dual-role decision packages (Executive Brief + SOP Work Order) from completed scenario runs.
 
 ### Fault Injection & Simulation Control
 - `POST /simulate/degrade_cnc`: Trigger critical tool wear on `CNC-01`.
 - `POST /simulate/reset_cnc`: Recalibrate `CNC-01` to nominal baseline.
-- `POST /simulate/reset_all`: Reset all factory machines and reinitialize simulation run.
-- `POST /machines/{machine_id}/fault`: Inject custom fault type and severity.
+- `POST /simulate/reset`: Reset all factory machines and reinitialize simulation run.
+- `POST /machines/{machine_id}/inject-fault`: Inject custom fault type and severity.
+- `POST /machines/{machine_id}/reset`: Recalibrate and reset an individual machine.
 
 ---
 
 ## 5. Getting Started
+
+### 🚀 One-Click Quick Start (Windows)
+
+If you have downloaded or cloned this repository on Windows, simply double-click either:
+* **`START.bat`** (or **`SETUP-AND-START.bat`**)
+
+The launcher automatically:
+1. **Detects Environment**: Checks for Docker, Python 3.10+, and Node.js.
+2. **Auto-Selects Optimal Mode**:
+   * **Docker Mode** (Default if Docker is running): Boots MongoDB 7.0, Mosquitto MQTT, FastAPI, and Nginx at `http://localhost:3000`.
+   * **Local Native Mode** (If Docker is not running or absent): Automatically creates `dashboard\backend\venv`, installs Python requirements, runs `npm install`, launches the servers, and opens `http://localhost:5173`.
+3. **Opens Browser**: Automatically opens the Digital Twin Command Center and What-If Studio in your default browser.
+
+#### Command-Line Options:
+```cmd
+START.bat            :: Interactive launcher with 5s auto-countdown
+START.bat docker     :: Force Docker Compose launch
+START.bat local      :: Force Local Native launch (FastAPI + Vite, no Docker)
+START.bat stop       :: Stop all running containers and free ports 8000/5173
+```
+
+---
+
+### Manual Setup (Alternative)
 
 ### Prerequisites
 - **Python 3.11+**
@@ -281,11 +311,8 @@ mosquitto -c dashboard/mosquitto/mosquitto.conf
 ```bash
 cd dashboard/backend
 
-# Run the full unit test suite (45 tests)
+# Run the full unit test suite (50+ tests covering Live Twin, Process Twin, Causal DAG, Scenario Worker, Reasoning Engine, and REST APIs)
 python -m unittest discover -s tests -p "test_*.py"
-
-# Run IoT engineer verification suite
-python ..\..\scratch\verify_bug_fixes.py
 ```
 
 ---
@@ -300,6 +327,6 @@ python ..\..\scratch\verify_bug_fixes.py
 | **3** | Process Twin, frozen snapshot, production tokens, DAG bottleneck & defect tracing | **Complete** |
 | **4** | Scenario Worker, snapshot forking, isolated counterfactual forward simulation | **Complete** |
 | **5** | Dashboard integration, live-first policy, UI decluttering, end-to-end testing | **Complete** |
-| **6** | Container and Kubernetes deployment (Dockerfiles, Compose, manifests) | *In Progress* |
+| **6** | Container and Kubernetes deployment (Dockerfiles, Compose, manifests) | **Complete** |
 | **7** | Observability, metric export, automated fault injection benchmarks | *Planned* |
 | **8** | Research report closeout and reproducibility package | *Planned* |

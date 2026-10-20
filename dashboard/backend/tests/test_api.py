@@ -60,6 +60,10 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(twin.status_code, 200)
         self.assertGreaterEqual(len(history.json()), 1)
 
+        events_res = self.client.get("/api/v1/events?limit=10")
+        self.assertEqual(events_res.status_code, 200)
+        self.assertGreaterEqual(len(events_res.json()), 1)
+
     def test_live_twin_list_and_not_found_handling(self) -> None:
         twins_response = self.client.get("/api/v1/twins")
         self.assertEqual(twins_response.status_code, 200)
@@ -138,6 +142,11 @@ class ApiTests(unittest.TestCase):
         presets = presets_res.json()
         self.assertGreaterEqual(len(presets), 4)
 
+        import main
+        if len(main.twin_repository.list_twins()) == 0:
+            from tests.test_scenario_worker import _populate_test_twins
+            _populate_test_twins(main.live_twin_service)
+
         # 2. Run preset scenario
         run_preset_res = self.client.post("/api/v1/scenarios/presets/preventive_tool_change/run?horizon_seconds=30")
         self.assertEqual(run_preset_res.status_code, 200)
@@ -177,6 +186,25 @@ class ApiTests(unittest.TestCase):
 
         not_found_res = self.client.get(f"/api/v1/scenarios/{custom_id}")
         self.assertEqual(not_found_res.status_code, 404)
+
+        # 7. Decision strategies endpoint
+        strategies_res = self.client.get("/api/v1/scenarios/strategies?machine_id=CNC-01&quota=120")
+        self.assertEqual(strategies_res.status_code, 200)
+        strat_data = strategies_res.json()
+        self.assertIn("manager_brief", strat_data)
+        self.assertIn("worker_order", strat_data)
+        self.assertIn("strategies", strat_data)
+        self.assertGreaterEqual(len(strat_data["strategies"]), 3)
+
+        # 8. Decision analyze endpoint
+        analyze_res = self.client.post(
+            "/api/v1/scenarios/analyze",
+            json={"target_machine_id": "CNC-01", "shift_quota_target": 120},
+        )
+        self.assertEqual(analyze_res.status_code, 200)
+        analyze_data = analyze_res.json()
+        self.assertIn("manager_brief", analyze_data)
+        self.assertIn("worker_order", analyze_data)
 
 
 if __name__ == "__main__":

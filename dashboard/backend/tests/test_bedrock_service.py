@@ -3,9 +3,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from services.bedrock_service import BedrockService
+from services.bedrock_service import BedrockService, BOTO3_AVAILABLE
 
 
+@unittest.skipUnless(BOTO3_AVAILABLE, "boto3 not installed (AWS Bedrock removed)")
 class BedrockServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.service = BedrockService(

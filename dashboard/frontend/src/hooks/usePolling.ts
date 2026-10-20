@@ -222,3 +222,9 @@ export function useDefectTrace(intervalMs = 3000, limit = 50) {
   return usePoll<DefectAttributionReport>(fetcher, intervalMs);
 }
 
+
+/** Hook to poll historical events from /api/v1/events. */
+export function useEvents(intervalMs = 2000, limit = 100) {
+  const fetcher = useCallback(() => api.getEvents(limit), [limit]);
+  return usePoll<any[]>(fetcher, intervalMs);
+}

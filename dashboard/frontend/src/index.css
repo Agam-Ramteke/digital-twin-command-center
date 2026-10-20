@@ -4,29 +4,32 @@
 
 /* --- Google Fonts --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
 
 /* ============================================================
    CSS Custom Properties
    ============================================================ */
 :root {
   /* --- Backgrounds --- */
-  --bg-primary: #F5F3EF;
-  --bg-secondary: #EDEAE4;
-  --bg-surface: #FFFFFF;
-  --bg-surface-alt: #F9F7F3;
-  --bg-dark: #1E1E1E;
-  --bg-dark-surface: #2A2A2A;
-  --bg-sidebar: #1C1C1E;
+  --bg-primary: #09090b;
+  --bg-secondary: #121216;
+  --bg-surface: rgba(18, 18, 24, 0.75);
+  --bg-surface-alt: rgba(26, 26, 34, 0.85);
+  --bg-dark: #000000;
+  --bg-dark-surface: #141418;
+  --bg-sidebar: rgba(10, 10, 14, 0.90);
 
   /* --- Text --- */
-  --text-primary: #2C2C2C;
-  --text-secondary: #6B6B6B;
-  --text-tertiary: #9A9A9A;
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
   --text-on-dark: #E8E6E1;
   --text-on-dark-secondary: #A0A0A0;
 
   /* --- Accent --- */
-  --accent-blue: #5B7B94;
+  --accent-blue: #38bdf8;
   --accent-blue-light: #7A9BB4;
   --accent-blue-muted: rgba(91, 123, 148, 0.12);
   --accent-copper: #C47B3B;
@@ -34,21 +37,22 @@
   --accent-copper-muted: rgba(196, 123, 59, 0.12);
 
   /* --- Status --- */
-  --status-good: #4A7C59;
+  --status-good: #34d399;
   --status-good-bg: rgba(74, 124, 89, 0.08);
-  --status-warn: #C49A3B;
+  --status-warn: #fbbf24;
   --status-warn-bg: rgba(196, 154, 59, 0.08);
-  --status-error: #B85C4A;
+  --status-error: #f87171;
   --status-error-bg: rgba(184, 92, 74, 0.08);
-  --status-info: #5B7B94;
+  --status-info: #38bdf8;
   --status-info-bg: rgba(91, 123, 148, 0.08);
-  --status-neutral: #9A9A9A;
+  --status-neutral: #71717a;
 
   /* --- Borders --- */
-  --border-light: rgba(0, 0, 0, 0.06);
-  --border-medium: rgba(0, 0, 0, 0.10);
-  --border-heavy: rgba(0, 0, 0, 0.16);
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.14);
+  --border-heavy: rgba(255, 255, 255, 0.22);
   --border-accent: var(--accent-blue);
+  --border-color: var(--border-light);
 
   /* --- Spacing --- */
   --space-xs: 4px;
@@ -101,8 +105,33 @@
   /* --- Layout --- */
   --sidebar-width: 220px;
   --header-height: 48px;
+  --chart-1: oklch(0.32 0 none);
+  --chart-2: oklch(0.41 0 none);
+  --chart-3: oklch(0.54 0 none);
+  --chart-4: oklch(0.71 0 none);
+  --chart-5: oklch(0.89 0 none);
+  --chart-background: oklch(1 0 0);
+  --chart-foreground: oklch(0.145 0.004 285);
+  --chart-foreground-muted: oklch(0.55 0.014 260);
+  --chart-line-primary: var(--chart-1);
+  --chart-line-secondary: var(--chart-2);
+  --chart-crosshair: oklch(0.4 0.1828 274.34);
+  --chart-grid: oklch(0.9 0 0);
+  --chart-brush-border: var(--chart-grid);
+  --chart-tooltip-background: var(--popover);
+  --chart-tooltip-foreground: var(--popover-foreground);
+  --chart-tooltip-muted: var(--muted-foreground);
+  --chart-marker-background: oklch(0.97 0.005 260);
+  --chart-marker-border: oklch(0.85 0.01 260);
+  --chart-marker-foreground: oklch(0.3 0.01 260);
+  --chart-label: oklch(0.45 0.01 260);
+  --chart-scale-01: oklch(0.98 0.003 106);
+  --chart-scale-02: oklch(0.92 0.008 106);
+  --chart-scale-03: oklch(0.82 0.015 106);
+  --chart-scale-04: oklch(0.68 0.02 106);
+  --chart-scale-05: oklch(0.55 0.025 106);
+  --chart-scale-pattern-color: oklch(0.96 0.005 106);
 }
-
 
 /* ============================================================
    Reset & Base
@@ -135,14 +164,27 @@ body {
   display: flex;
 }
 
-
 /* ============================================================
    App Shell
    ============================================================ */
+.app-topo-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.85;
+}
+
 .app-shell {
   display: flex;
   width: 100%;
   height: 100%;
+  position: relative;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .app-main {
@@ -151,6 +193,9 @@ body {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
+  background: transparent;
 }
 
 .app-content {
@@ -158,8 +203,18 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-lg);
+  position: relative;
+  z-index: 1;
+  background: transparent;
 }
 
+.app-content.app-content-fullbleed,
+.app-content:has(.factory-floor-3d-root) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ============================================================
    Sidebar
@@ -172,8 +227,12 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-right: 1px solid rgba(255,255,255,0.05);
+  border-right: 1px solid var(--border-light);
   user-select: none;
+  position: relative;
+  z-index: 20;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .sidebar-brand {
@@ -260,7 +319,6 @@ body {
   color: var(--text-on-dark-secondary);
 }
 
-
 /* ============================================================
    Header
    ============================================================ */
@@ -271,8 +329,12 @@ body {
   justify-content: space-between;
   padding: 0 var(--space-lg);
   border-bottom: 1px solid var(--border-light);
-  background: var(--bg-surface);
+  background: rgba(12, 12, 16, 0.82);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .header-left {
@@ -291,6 +353,7 @@ body {
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }
+
 
 .header-right {
   display: flex;
@@ -325,7 +388,6 @@ body {
   color: var(--text-secondary);
 }
 
-
 /* ============================================================
    Page Titles
    ============================================================ */
@@ -345,7 +407,6 @@ body {
   color: var(--text-secondary);
   margin-top: 2px;
 }
-
 
 /* ============================================================
    KPI Strip
@@ -405,7 +466,6 @@ body {
 
 .kpi-trend.up { color: var(--status-good); }
 .kpi-trend.down { color: var(--status-error); }
-
 
 /* ============================================================
    Production Flow
@@ -542,7 +602,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-
 /* ============================================================
    Two-Column Analytics
    ============================================================ */
@@ -574,7 +633,6 @@ body {
   text-transform: uppercase;
   color: var(--text-secondary);
 }
-
 
 /* ============================================================
    Health Ranking Bars
@@ -625,7 +683,6 @@ body {
   text-align: right;
   flex-shrink: 0;
 }
-
 
 /* ============================================================
    Attention Panel
@@ -686,7 +743,6 @@ body {
   margin-top: 2px;
 }
 
-
 /* ============================================================
    Status Strip (Factory Footer)
    ============================================================ */
@@ -723,7 +779,6 @@ body {
 .strip-value.connected {
   color: var(--status-good);
 }
-
 
 /* ============================================================
    Machine Table
@@ -779,7 +834,6 @@ body {
   font-family: var(--font-mono);
   font-weight: var(--weight-semibold);
 }
-
 
 /* ============================================================
    Machine Detail Page
@@ -844,7 +898,6 @@ body {
   margin-top: 2px;
 }
 
-
 /* ============================================================
    Twin Sync Table
    ============================================================ */
@@ -883,7 +936,6 @@ body {
   border-top: 1px solid var(--border-light);
 }
 
-
 /* ============================================================
    Chart Tabs
    ============================================================ */
@@ -918,7 +970,6 @@ body {
   color: var(--accent-blue);
   border-bottom-color: var(--accent-blue);
 }
-
 
 /* ============================================================
    Badges & Indicators
@@ -963,7 +1014,6 @@ body {
   background: var(--accent-blue-muted);
   color: var(--accent-blue);
 }
-
 
 /* ============================================================
    Action Buttons
@@ -1015,7 +1065,6 @@ body {
   font-size: var(--text-xs);
 }
 
-
 /* ============================================================
    System Page Grid
    ============================================================ */
@@ -1046,7 +1095,6 @@ body {
   color: var(--text-tertiary);
   margin-top: 2px;
 }
-
 
 /* ============================================================
    Events Page
@@ -1081,7 +1129,6 @@ body {
   max-width: 300px;
 }
 
-
 /* ============================================================
    Simulation Controls
    ============================================================ */
@@ -1111,7 +1158,6 @@ body {
   color: var(--text-tertiary);
   margin-left: auto;
 }
-
 
 /* ============================================================
    Responsive
@@ -1144,7 +1190,6 @@ body {
   }
 }
 
-
 /* ============================================================
    Recharts Overrides
    ============================================================ */
@@ -1165,7 +1210,6 @@ body {
   box-shadow: var(--shadow-md) !important;
   font-size: 12px !important;
 }
-
 
 /* ============================================================
    Scrollbar
@@ -1636,3 +1680,70 @@ body {
   }
 }
 
+.dark {
+  --chart-1: oklch(1 0 none);
+  --chart-2: oklch(0.73 0 none);
+  --chart-3: oklch(0.51 0 none);
+  --chart-4: oklch(0.39 0 none);
+  --chart-5: oklch(0.32 0 none);
+  --chart-background: oklch(0.145 0 0);
+  --chart-foreground: oklch(0.45 0 0);
+  --chart-foreground-muted: oklch(0.65 0.01 260);
+  --chart-crosshair: oklch(0.45 0 0);
+  --chart-grid: oklch(0.25 0 0);
+  --chart-brush-border: var(--chart-grid);
+  --chart-marker-background: oklch(0.25 0.01 260);
+  --chart-marker-border: oklch(0.4 0.01 260);
+  --chart-marker-foreground: oklch(0.9 0 0);
+  --chart-label: oklch(0.75 0.01 260);
+  --chart-scale-01: oklch(0.28 0.03 270);
+  --chart-scale-02: oklch(0.38 0.04 270);
+  --chart-scale-03: oklch(0.48 0.05 270);
+  --chart-scale-04: oklch(0.58 0.06 270);
+  --chart-scale-05: oklch(0.68 0.07 270);
+  --chart-scale-pattern-color: oklch(0.145 0 0);
+}
+
+@theme inline {
+  --color-chart-1: var(----chart-1);
+  --color-chart-2: var(----chart-2);
+  --color-chart-3: var(----chart-3);
+  --color-chart-4: var(----chart-4);
+  --color-chart-5: var(----chart-5);
+  --color-chart-background: var(----chart-background);
+  --color-chart-foreground: var(----chart-foreground);
+  --color-chart-foreground-muted: var(----chart-foreground-muted);
+  --chart-line-primary: var(----chart-line-primary);
+  --chart-line-secondary: var(----chart-line-secondary);
+  --color-chart-crosshair: var(----chart-crosshair);
+  --color-chart-grid: var(----chart-grid);
+  --chart-brush-border: var(----chart-brush-border);
+  --chart-tooltip-background: var(----chart-tooltip-background);
+  --chart-tooltip-foreground: var(----chart-tooltip-foreground);
+  --chart-tooltip-muted: var(----chart-tooltip-muted);
+  --color-chart-marker-background: var(----chart-marker-background);
+  --color-chart-marker-border: var(----chart-marker-border);
+  --color-chart-marker-foreground: var(----chart-marker-foreground);
+  --color-chart-label: var(----chart-label);
+  --color-chart-scale-01: var(----chart-scale-01);
+  --color-chart-scale-02: var(----chart-scale-02);
+  --color-chart-scale-03: var(----chart-scale-03);
+  --color-chart-scale-04: var(----chart-scale-04);
+  --color-chart-scale-05: var(----chart-scale-05);
+  --color-chart-scale-pattern-color: var(----chart-scale-pattern-color);
+}
+
+
+.analytics-panel,
+.kpi-card,
+.production-flow,
+.machine-card,
+.machine-node,
+.attention-panel,
+.machine-table-wrapper,
+.detail-section,
+.system-service,
+.gauge-panel {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

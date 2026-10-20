@@ -133,6 +133,9 @@ class TelemetryPayload(StrictModel):
     cycle_time_s: float = Field(gt=0, le=36000)
     energy_kwh: float = Field(ge=0)
     production_count: int = Field(ge=0)
+    wip_count: int = Field(default=0, ge=0)
+    is_starved: bool = Field(default=False)
+    is_blocked: bool = Field(default=False)
     health_score: float = Field(ge=0, le=100)
     anomaly_score: float = Field(ge=0, le=1)
     quality_score: float = Field(ge=0, le=1)
@@ -215,6 +218,8 @@ class HealthState(StrictModel):
 
 class ProductionState(StrictModel):
     cumulative_output: int = Field(ge=0)
+    wip_count: int = Field(default=0, ge=0)
+    is_starved: bool = Field(default=False)
     latest_quality_score: float = Field(ge=0, le=1)
     latest_token_id: str | None = None
 
@@ -416,6 +421,8 @@ class StationOutcome(StrictModel):
     avg_cycle_time_s: float = Field(ge=0)
     avg_quality_score: float = Field(ge=0, le=1)
     fault_occurred: bool = False
+    final_temperature_c: float | None = None
+    final_tool_wear_percent: float | None = None
 
 
 class LineOutcome(StrictModel):
@@ -457,6 +464,61 @@ class TrajectorySample(StrictModel):
     counterfactual_cnc_health: float
 
 
+
+
+class DecisionStrategy(StrictModel):
+    strategy_id: str
+    name: str
+    strategy_type: str  # fix_now, derate_finish, status_quo, custom
+    action_label: str
+    projected_output: int
+    scrap_count: int
+    downtime_minutes: float
+    total_cost_usd: float
+    scrap_cost_usd: float
+    downtime_cost_usd: float
+    tooling_cost_usd: float
+    risk_level: str  # LOW, MEDIUM, HIGH, CRITICAL
+    quota_met: bool
+    is_recommended: bool
+    recommendation_reason: str
+
+
+class WorkerWorkOrder(StrictModel):
+    work_order_id: str
+    target_machine_id: str
+    station_name: str
+    priority: str  # URGENT, SCHEDULED, DEFERRED
+    estimated_duration_min: int
+    optimal_window_description: str
+    required_tools_and_parts: list[str]
+    safety_loto_steps: list[str]
+    sop_procedure_steps: list[str]
+    post_maintenance_verification: list[str]
+
+
+class ManagerExecutiveBrief(StrictModel):
+    recommended_strategy_name: str
+    recommended_action: str
+    financial_advantage_usd: float
+    shift_quota_target: int
+    shift_quota_feasible: bool
+    risk_assessment: str
+    key_tradeoff_summary: str
+    ai_reasoning_narrative: str
+
+
+class ScenarioDecisionAnalysis(StrictModel):
+    scenario_id: str
+    analyzed_at: datetime = Field(default_factory=utc_now)
+    target_machine_id: str
+    current_health_percent: float
+    active_anomaly: str
+    manager_brief: ManagerExecutiveBrief
+    worker_order: WorkerWorkOrder
+    strategies: list[DecisionStrategy]
+    llm_prompt_template: str | None = None
+
 class ScenarioRunResult(StrictModel):
     """Persisted scenario execution record in MongoDB `scenarios`."""
 
@@ -475,5 +537,6 @@ class ScenarioRunResult(StrictModel):
     counterfactual: LineOutcome
     comparison: ScenarioDelta
     trajectory: list[TrajectorySample] = Field(default_factory=list)
+    decision_analysis: ScenarioDecisionAnalysis | None = None
 
 

@@ -4,7 +4,7 @@ import { useMqtt } from '../../hooks/useMqtt';
 
 export default function Header() {
   const [time, setTime] = useState(new Date());
-  const { data: simState, connected: simConnected } = useSimState(2000);
+  const { data: simState } = useSimState(2000);
   const { data: readiness, connected: backendConnected } = useSystemReadiness(2000);
   const { isConnected: isMqtt } = useMqtt();
 
@@ -30,6 +30,7 @@ export default function Header() {
         <span className="header-title">Factory Twin</span>
         <span className="header-subtitle">Automotive Component Manufacturing</span>
       </div>
+
       <div className="header-right">
         {/* Backend & Persistence Badge */}
         <div

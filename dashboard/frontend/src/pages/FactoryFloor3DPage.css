@@ -1,0 +1,1630 @@
+/* ============================================================
+   3D VIRTUAL FACTORY FLOOR — Dark High-Tech Industrial Styling
+   ============================================================ */
+
+.factory-floor-3d-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: calc(100vh - 48px);
+  background-color: #16181c;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #f8fafc;
+}
+
+/* Three.js canvas container */
+.factory-canvas-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  z-index: 1;
+}
+
+.factory-canvas-container:active {
+  cursor: grabbing;
+}
+
+.factory-canvas-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ============================================================
+   Floating 3D Holographic Station Badges
+   ============================================================ */
+.f3d-station-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 20;
+}
+
+.f3d-station-label:hover {
+  z-index: 35;
+}
+
+.f3d-station-label.is-selected {
+  z-index: 30;
+}
+
+.f3d-station-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  color: #e2e8f0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.f3d-station-label:hover .f3d-station-badge {
+  transform: translateY(-3px) scale(1.06);
+  border-color: #5b7b94;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7), 0 0 16px rgba(91, 123, 148, 0.4);
+}
+
+.f3d-station-label.is-selected .f3d-station-badge {
+  transform: translateY(-2px) scale(1.05);
+  background: rgba(28, 41, 54, 0.94);
+  border-color: #5b7b94;
+  color: #e2e8f0;
+  box-shadow: 0 8px 24px rgba(91, 123, 148, 0.45);
+}
+
+.f3d-station-badge.is-warning {
+  background: rgba(56, 18, 18, 0.94);
+  border-color: #b85c4a;
+  color: #fecaca;
+  box-shadow: 0 4px 18px rgba(184, 92, 74, 0.35);
+}
+
+.f3d-station-badge.is-starved {
+  background: rgba(45, 34, 18, 0.94);
+  border-color: #c49a3b;
+  color: #fef3c7;
+}
+
+.f3d-station-badge.is-blocked {
+  background: rgba(48, 28, 16, 0.94);
+  border-color: #c47b3b;
+  color: #ffedd5;
+}
+
+.f3d-badge-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.f3d-badge-header {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
+}
+
+.f3d-badge-telemetry {
+  font-size: 10px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+}
+
+.f3d-tag-pill {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.f3d-tag-pill.starved {
+  background: rgba(196, 154, 59, 0.25);
+  color: #e5b955;
+}
+
+.f3d-tag-pill.blocked {
+  background: rgba(196, 123, 59, 0.25);
+  color: #d4944f;
+}
+
+.f3d-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #4a7c59;
+  box-shadow: 0 0 6px rgba(74, 124, 89, 0.6);
+}
+
+.f3d-status-dot.dot-warning {
+  background: #b85c4a;
+  box-shadow: 0 0 6px rgba(184, 92, 74, 0.6);
+  animation: f3d-pulse-fast 1s infinite;
+}
+
+.f3d-status-dot.dot-starved {
+  background: #c49a3b;
+  box-shadow: 0 0 6px rgba(196, 154, 59, 0.6);
+  animation: f3d-pulse-slow 2s infinite;
+}
+
+.f3d-status-dot.dot-blocked {
+  background: #c47b3b;
+  box-shadow: 0 0 6px rgba(196, 123, 59, 0.6);
+}
+
+.f3d-pointer-arrow {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid rgba(51, 65, 85, 0.85);
+  margin: 0 auto;
+}
+
+.f3d-pointer-arrow.is-selected {
+  border-top-color: #5b7b94;
+}
+
+.f3d-pointer-arrow.is-warning {
+  border-top-color: #b85c4a;
+}
+
+.f3d-pointer-arrow.is-starved {
+  border-top-color: #c49a3b;
+}
+
+.f3d-pointer-arrow.is-blocked {
+  border-top-color: #c47b3b;
+}
+
+/* ============================================================
+   Action Notification Banner
+   ============================================================ */
+.f3d-notice-pill {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid #5b7b94;
+  color: #cbd5e1;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  animation: f3d-slide-down 0.25s ease-out;
+}
+
+/* WebGL Context Unavailable Fallback Screen */
+.f3d-webgl-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 480px;
+  padding: 32px 28px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+  color: #f1f5f9;
+}
+
+.f3d-webgl-title {
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.f3d-webgl-desc {
+  margin-top: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   Top HUD Bar
+   ============================================================ */
+.f3d-hud-top {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  z-index: 30;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.f3d-hud-controls {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.f3d-chips-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.f3d-panel {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  color: #e2e8f0;
+}
+
+/* Left: Summary Metrics */
+.f3d-summary-panel {
+  padding: 7px 16px;
+  gap: 14px;
+}
+
+.f3d-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 14px;
+  border-right: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.f3d-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.f3d-brand-label {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.f3d-brand-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 2px;
+}
+
+.f3d-metrics-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.f3d-metric-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.f3d-metric-key {
+  font-size: 10px;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  margin-bottom: 1px;
+}
+
+.f3d-metric-val {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.f3d-metric-val.oee {
+  color: #4a7c59;
+}
+
+.f3d-metric-val.output {
+  color: #7a9bb4;
+}
+
+.f3d-metric-val.wip {
+  color: #c49a3b;
+}
+
+.f3d-metric-val.online {
+  color: #f8fafc;
+}
+
+/* Center: Camera Presets */
+.f3d-camera-panel {
+  padding: 5px 8px;
+  gap: 4px;
+}
+
+.f3d-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  transition: all 0.15s ease;
+}
+
+.f3d-btn:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #ffffff;
+}
+
+.f3d-btn.active-cam {
+  background: #5b7b94;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(91, 123, 148, 0.4);
+}
+
+.f3d-btn.active-cinematic {
+  background: #c47b3b;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(196, 123, 59, 0.4);
+}
+
+.f3d-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(51, 65, 85, 0.8);
+  margin: 0 4px;
+}
+
+.f3d-chip {
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.f3d-chip:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #ffffff;
+}
+
+.f3d-chip.active {
+  background: #5b7b94;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(91, 123, 148, 0.35);
+}
+
+/* Right: Tools & Record Mode */
+.f3d-tools-panel {
+  padding: 5px 8px;
+  gap: 6px;
+}
+
+.f3d-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.f3d-icon-btn:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #ffffff;
+}
+
+.f3d-icon-btn.active {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+  border-color: rgba(14, 165, 233, 0.4);
+}
+
+.f3d-record-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  transition: all 0.15s ease;
+}
+
+.f3d-record-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+/* Floating Exit Clean Record Button */
+.f3d-exit-record-pill {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 40;
+}
+
+.f3d-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #f1f5f9;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.f3d-exit-btn:hover {
+  transform: scale(1.05);
+  background: rgba(30, 41, 59, 0.95);
+}
+
+/* ============================================================
+   Interactive Machine Control & Telemetry Drawer
+   ============================================================ */
+.f3d-drawer {
+  position: absolute;
+  top: 68px;
+  right: 16px;
+  bottom: 16px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  z-index: 35;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: f3d-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.f3d-drawer-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(10, 14, 23, 0.5);
+}
+
+.f3d-drawer-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.f3d-drawer-mid-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.f3d-drawer-mid {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.f3d-status-pill {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.f3d-status-pill.running {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.f3d-status-pill.fault {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.f3d-status-pill.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.f3d-drawer-station-name {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.f3d-drawer-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.f3d-drawer-close:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #ffffff;
+}
+
+.f3d-drawer-desc {
+  padding: 10px 18px;
+  background: rgba(10, 14, 23, 0.3);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.7);
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.f3d-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+}
+
+/* Custom scrollbar for drawer */
+.f3d-drawer-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.f3d-drawer-body::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.f3d-drawer-body::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8);
+  border-radius: 4px;
+}
+
+/* Real-time Telemetry Grid */
+.f3d-telemetry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.f3d-telemetry-card {
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.f3d-card-label {
+  font-size: 10px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.f3d-card-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 4px;
+}
+
+/* Health & State Card */
+.f3d-health-card {
+  background: rgba(30, 41, 59, 0.3);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.f3d-health-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.f3d-health-title {
+  color: #94a3b8;
+}
+
+.f3d-health-pct {
+  font-weight: 700;
+}
+
+.f3d-health-pct.good {
+  color: #10b981;
+}
+
+.f3d-health-pct.warn {
+  color: #f59e0b;
+}
+
+.f3d-health-pct.crit {
+  color: #ef4444;
+}
+
+.f3d-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #0f172a;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.f3d-progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.f3d-progress-fill.good {
+  background: #10b981;
+}
+
+.f3d-progress-fill.warn {
+  background: #f59e0b;
+}
+
+.f3d-progress-fill.crit {
+  background: #ef4444;
+}
+
+.f3d-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(51, 65, 85, 0.7);
+  font-size: 11px;
+}
+
+.f3d-meta-label {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.f3d-meta-val {
+  font-weight: 600;
+  color: #f8fafc;
+  margin-top: 1px;
+}
+
+.f3d-meta-val.starved {
+  color: #f59e0b;
+}
+
+.f3d-meta-val.blocked {
+  color: #f97316;
+}
+
+/* Controls Section */
+.f3d-controls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.f3d-controls-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.f3d-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.f3d-btn-fault {
+  background: rgba(69, 10, 10, 0.35);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.15s ease;
+}
+
+.f3d-btn-fault:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.5);
+  color: #ffffff;
+}
+
+.f3d-btn-warning {
+  background: rgba(69, 26, 3, 0.35);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fcd34d;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.15s ease;
+}
+
+.f3d-btn-warning:hover:not(:disabled) {
+  background: rgba(180, 83, 9, 0.5);
+  color: #ffffff;
+}
+
+.f3d-btn-degrade {
+  width: 100%;
+  background: rgba(180, 83, 9, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fde68a;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.15s ease;
+}
+
+.f3d-btn-degrade:hover:not(:disabled) {
+  background: rgba(180, 83, 9, 0.5);
+  color: #ffffff;
+}
+
+.f3d-btn-reset {
+  width: 100%;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #e2e8f0;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.f3d-btn-reset:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.8);
+  color: #ffffff;
+}
+
+.f3d-btn-reset:disabled,
+.f3d-btn-fault:disabled,
+.f3d-btn-warning:disabled,
+.f3d-btn-degrade:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pinned Drawer Footer */
+.f3d-drawer-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(51, 65, 85, 0.75);
+  background: rgba(10, 14, 23, 0.7);
+  flex-shrink: 0;
+}
+
+.f3d-link-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.f3d-link-btn.telemetry {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #38bdf8;
+}
+
+.f3d-link-btn.telemetry:hover {
+  background: rgba(51, 65, 85, 0.8);
+  color: #7dd3fc;
+}
+
+.f3d-link-btn.twin {
+  background: rgba(8, 47, 73, 0.5);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #7dd3fc;
+}
+
+.f3d-link-btn.twin:hover {
+  background: rgba(12, 74, 110, 0.7);
+  color: #bae6fd;
+}
+
+/* ============================================================
+   Bottom Quick-Select Dock
+   ============================================================ */
+.f3d-dock-wrapper {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  pointer-events: none;
+  transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.f3d-dock-wrapper.drawer-open {
+  left: calc((100% - 410px) / 2);
+}
+
+@media (max-width: 1200px) {
+  .f3d-dock-wrapper.drawer-open {
+    left: calc((100% - 370px) / 2);
+  }
+}
+
+.f3d-dock {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.90);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 16px;
+  padding: 6px 10px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6);
+}
+
+.f3d-dock-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.f3d-dock-item:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
+.f3d-dock-item.active {
+  background: rgba(91, 123, 148, 0.22);
+  border-color: #5b7b94;
+  color: #f1f5f9;
+  box-shadow: 0 0 16px rgba(91, 123, 148, 0.35);
+  transform: translateY(-2px);
+}
+
+.f3d-dock-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #10b981;
+}
+
+.f3d-dock-dot.dot-fault {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: f3d-pulse-fast 1s infinite;
+}
+
+.f3d-dock-dot.dot-starved {
+  background: #f59e0b;
+}
+
+.f3d-dock-id {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.f3d-dock-badge-dual {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(91, 123, 148, 0.4);
+  color: #93c5fd;
+  border: 1px solid rgba(91, 123, 148, 0.7);
+  margin-left: 6px;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.f3d-dock-role {
+  font-size: 9px;
+  color: #94a3b8;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+/* ============================================================
+   Keyframe Animations
+   ============================================================ */
+@keyframes f3d-pulse-fast {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@keyframes f3d-pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes f3d-pulse-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(217, 119, 6, 0.4); }
+  50% { box-shadow: 0 0 22px rgba(217, 119, 6, 0.8); }
+}
+
+@keyframes f3d-slide-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes f3d-slide-down {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.spinning {
+  animation: f3d-spin 1s linear infinite;
+}
+
+.spinning-slow {
+  animation: f3d-spin 4s linear infinite;
+}
+
+/* ============================================================
+   Parallel Machines What-If Option & Simulation Controls
+   ============================================================ */
+.f3d-parallel-panel {
+  padding: 0;
+  border-radius: 10px;
+}
+
+.f3d-parallel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(22, 27, 34, 0.90);
+  border: 1px solid rgba(71, 85, 105, 0.65);
+  color: #cbd5e1;
+  padding: 6px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.f3d-parallel-btn:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: #5b7b94;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+
+.f3d-parallel-btn.active {
+  background: rgba(22, 36, 49, 0.96);
+  border-color: #5b7b94;
+  color: #f1f5f9;
+  box-shadow: 0 0 20px rgba(91, 123, 148, 0.45);
+}
+
+.f3d-parallel-btn-text {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.f3d-parallel-btn-title {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #ffffff;
+}
+
+.f3d-parallel-btn-sub {
+  font-size: 9px;
+  color: #94a3b8;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.f3d-parallel-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(71, 85, 105, 0.4);
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.f3d-parallel-badge.active {
+  background: rgba(74, 124, 89, 0.35);
+  border: 1px solid rgba(74, 124, 89, 0.6);
+  color: #86efac;
+}
+
+/* Simulation Controls Panel (Play/Pause, 1x 2x 3x) */
+.f3d-sim-panel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.f3d-speed-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.f3d-speed-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.f3d-speed-btn:hover {
+  color: #ffffff;
+}
+
+.f3d-speed-btn.active {
+  background: #5b7b94;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Parallel Chip & Dock item styles */
+.f3d-chip.parallel-chip {
+  border-color: rgba(91, 123, 148, 0.7);
+  color: #93c5fd;
+}
+
+.f3d-dock-item.parallel-dock {
+  border: 1px solid rgba(91, 123, 148, 0.45);
+  background: rgba(30, 41, 59, 0.35);
+}
+
+.f3d-dock-item.parallel-dock:hover {
+  background: rgba(91, 123, 148, 0.25);
+  border-color: #5b7b94;
+}
+
+.f3d-dock-item.parallel-dock.active {
+  background: rgba(91, 123, 148, 0.3);
+  border-color: #5b7b94;
+  box-shadow: 0 0 18px rgba(91, 123, 148, 0.45);
+}
+
+.f3d-tag-pill.parallel {
+  background: rgba(91, 123, 148, 0.3);
+  color: #93c5fd;
+  border: 1px solid rgba(91, 123, 148, 0.5);
+}
+
+/* ============================================================
+   What-If Digital Twin Scenario Live Banner
+   ============================================================ */
+.f3d-whatif-banner {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 18px;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(91, 123, 148, 0.65);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(91, 123, 148, 0.35);
+  animation: f3d-slide-down 0.25s ease-out;
+  max-width: 95vw;
+}
+
+.f3d-whatif-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.f3d-whatif-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(196, 123, 59, 0.2);
+  border: 1px solid rgba(196, 123, 59, 0.45);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fdba74;
+}
+
+.f3d-whatif-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.f3d-whatif-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.65);
+  border: 1px solid rgba(51, 65, 85, 0.65);
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+
+.f3d-whatif-stat .label {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.f3d-whatif-stat .value {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.f3d-whatif-stat .value.good {
+  color: #86efac;
+}
+
+.f3d-whatif-stat .value.warn {
+  color: #fde047;
+}
+
+.f3d-whatif-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.f3d-whatif-btn.revert {
+  background: rgba(51, 65, 85, 0.7);
+  border: 1px solid rgba(100, 116, 139, 0.6);
+  color: #e2e8f0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.f3d-whatif-btn.revert:hover {
+  background: rgba(184, 92, 74, 0.4);
+  border-color: #b85c4a;
+  color: #ffffff;
+}
+
+.f3d-whatif-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.f3d-whatif-close:hover {
+  color: #ffffff;
+}
+
+/* Responsive Breakpoints */
+
+/* ============================================================
+   Collapsible HUD Cards & Dropdown Menus (Kokonut UI Architecture)
+   ============================================================ */
+.f3d-whatif-container {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.f3d-dropdown-chevron {
+  transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+.f3d-dropdown-chevron.open {
+  transform: rotate(180deg);
+  color: #fdba74;
+}
+
+.f3d-whatif-dropdown-card {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: 480px;
+  max-width: 92vw;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(91, 123, 148, 0.65);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 24px rgba(91, 123, 148, 0.3);
+  padding: 12px 16px;
+  pointer-events: auto;
+}
+
+.f3d-whatif-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.f3d-whatif-card-close {
+  background: rgba(51, 65, 85, 0.5);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #94a3b8;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.f3d-whatif-card-close:hover {
+  background: rgba(71, 85, 105, 0.8);
+  color: #ffffff;
+}
+
+.f3d-whatif-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.f3d-whatif-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.f3d-whatif-btn.collapse {
+  background: transparent;
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.f3d-whatif-btn.collapse:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #f1f5f9;
+}
+
+/* Collapsible Dropdown Menus (Camera & View Tools) */
+.f3d-collapsible-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.f3d-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.f3d-trigger-btn:hover {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: #5b7b94;
+  color: #ffffff;
+}
+
+.f3d-trigger-btn.active {
+  background: rgba(22, 36, 49, 0.98);
+  border-color: #5b7b94;
+  color: #f1f5f9;
+  box-shadow: 0 0 16px rgba(91, 123, 148, 0.4);
+}
+
+.f3d-trigger-chevron {
+  color: #64748b;
+  margin-left: 2px;
+}
+
+.f3d-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 55;
+  width: 240px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(91, 123, 148, 0.2);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.f3d-menu-dropdown.tools-menu {
+  width: 230px;
+}
+
+.f3d-menu-header {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  padding: 4px 8px 3px 8px;
+  text-transform: uppercase;
+}
+
+.f3d-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #cbd5e1;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+  width: 100%;
+}
+
+.f3d-menu-item:hover {
+  background: rgba(51, 65, 85, 0.6);
+  color: #ffffff;
+}
+
+.f3d-menu-item.selected {
+  background: rgba(91, 123, 148, 0.25);
+  border-color: rgba(91, 123, 148, 0.5);
+  color: #ffffff;
+}
+
+.f3d-menu-item .item-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.f3d-menu-item .item-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.f3d-menu-item .item-sub {
+  font-size: 9px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.f3d-menu-item .check-icon {
+  color: #86efac;
+  flex-shrink: 0;
+}
+
+.f3d-menu-item .status-pill {
+  font-size: 9px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.f3d-menu-item .status-pill.on {
+  background: rgba(74, 124, 89, 0.3);
+  color: #86efac;
+  border: 1px solid rgba(74, 124, 89, 0.5);
+}
+
+.f3d-menu-item .status-pill.off {
+  background: rgba(71, 85, 105, 0.3);
+  color: #94a3b8;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+}
+
+@keyframes f3d-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1250px) {
+  .f3d-chips-group {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .f3d-dock-role {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .f3d-summary-panel .f3d-metric-item:nth-child(2),
+  .f3d-summary-panel .f3d-metric-item:nth-child(3) {
+    display: none;
+  }
+}

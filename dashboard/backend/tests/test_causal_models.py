@@ -124,6 +124,22 @@ class CausalFactoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_default_factory().tick(dt_s=0)
 
+    def test_material_flow_conservation_along_sequential_line(self) -> None:
+        factory = build_default_factory(seed=42)
+        for _ in range(120):
+            tick = factory.tick(dt_s=1.0)
+            counts = {s.machine_id: s.production_count for s in tick.telemetry}
+            st = counts["STAMPING-01"]
+            cn = counts["CNC-01"]
+            we = counts["WELDING-01"]
+            ins = counts["INSPECTION-01"]
+            pk = counts["PACKAGING-01"]
+            # Strict material flow conservation invariant: downstream never exceeds upstream
+            self.assertGreaterEqual(st, cn, f"CNC ({cn}) exceeded Stamping ({st})")
+            self.assertGreaterEqual(cn, we, f"Welding ({we}) exceeded CNC ({cn})")
+            self.assertGreaterEqual(we, ins, f"Inspection ({ins}) exceeded Welding ({we})")
+            self.assertGreaterEqual(ins, pk, f"Packaging ({pk}) exceeded Inspection ({ins})")
+
 
 if __name__ == "__main__":
     unittest.main()

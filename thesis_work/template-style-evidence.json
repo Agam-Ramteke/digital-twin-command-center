@@ -1,0 +1,168 @@
+{
+  "input": "C:\\Users\\ASUS\\OneDrive\\Desktop\\digital-twin-command-center\\thesis_work\\template-copy.docx",
+  "fonts_by_char_count": {},
+  "direct_run_formatting_runs": 623,
+  "direct_paragraph_formatting_paragraphs": 296,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 2,
+      "text": "<Font Size 18><1.5 line spacing>",
+      "style": "Normal"
+    },
+    {
+      "para_index": 7,
+      "text": " Industrial IOT",
+      "style": "Normal"
+    },
+    {
+      "para_index": 9,
+      "text": "                                                              to",
+      "style": "Normal"
+    },
+    {
+      "para_index": 10,
+      "text": " PRIYADARSHINI COLLEGE OF ENGINEERING",
+      "style": "Normal"
+    },
+    {
+      "para_index": 64,
+      "text": "                                                     Program Outcomes (POs)",
+      "style": "Normal"
+    },
+    {
+      "para_index": 87,
+      "text": "Program Educational Objectives: (PEOs)",
+      "style": "Normal"
+    },
+    {
+      "para_index": 92,
+      "text": "Program Specific Outcomes",
+      "style": "Normal"
+    },
+    {
+      "para_index": 96,
+      "text": "PRIYADARSHINI COLLGE OF ENGINEERING. NAGPUR",
+      "style": "Normal"
+    },
+    {
+      "para_index": 99,
+      "text": "Department of Industrial IOT",
+      "style": "Body Text"
+    },
+    {
+      "para_index": 108,
+      "text": "GUIDED BY",
+      "style": "Normal"
+    },
+    {
+      "para_index": 111,
+      "text": "Guide Name",
+      "style": "Normal"
+    },
+    {
+      "para_index": 113,
+      "text": "&",
+      "style": "Normal"
+    },
+    {
+      "para_index": 115,
+      "text": "                                                       Name of the Industrial Guide (Optional)",
+      "style": "Body Text"
+    },
+    {
+      "para_index": 116,
+      "text": "                                                                 Name of the Industry",
+      "style": "Body Text"
+    },
+    {
+      "para_index": 123,
+      "text": "PRIYADARSHINI COLLGE OF ENGINEERING, NAGPUR-440019 (INDIA)",
+      "style": "Normal"
+    },
+    {
+      "para_index": 126,
+      "text": "Department of Industrial IOT",
+      "style": "Body Text"
+    },
+    {
+      "para_index": 141,
+      "text": "NAMES OF PROJECTEES-",
+      "style": "Normal"
+    },
+    {
+      "para_index": 143,
+      "text": "ACKNOWLEDGEMENT",
+      "style": "Normal"
+    },
+    {
+      "para_index": 167,
+      "text": "ABSTRACT",
+      "style": "Normal"
+    },
+    {
+      "para_index": 206,
+      "text": "INDEX",
+      "style": "Normal"
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 2,
+        "text": "<Font Size 18><1.5 line spacing>",
+        "style": "Normal"
+      },
+      {
+        "para_index": 3,
+        "text": "A Project Report Submitted in the partial fulfillment of requirement of the Degree of",
+        "style": "Normal"
+      },
+      {
+        "para_index": 4,
+        "text": "Bachelor of Technology",
+        "style": "Heading 2"
+      },
+      {
+        "para_index": 5,
+        "text": "in",
+        "style": "Heading 2"
+      },
+      {
+        "para_index": 7,
+        "text": " Industrial IOT",
+        "style": "Normal"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 2,
+        "run_text": "<Font",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": " ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": "Size",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": " ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": "18><1.5",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

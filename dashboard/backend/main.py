@@ -23,15 +23,18 @@ from domain.contracts import (
     ProductionToken,
     ScenarioForkRequest,
     ScenarioRunResult,
+    ScenarioDecisionAnalysis,
     TwinDocument,
 )
 from repositories.factory import create_scenario_repository, create_twin_repository
 from services import (
     BedrockService,
+    BOTO3_AVAILABLE,
     LiveTwinMqttConsumer,
     LiveTwinService,
     ProcessTwinService,
     ScenarioWorkerService,
+    ScenarioReasoningService,
 )
 
 
@@ -42,18 +45,23 @@ settings = Settings.from_environment()
 twin_repository = create_twin_repository(settings)
 scenario_repository = create_scenario_repository(settings)
 live_twin_service = LiveTwinService(twin_repository)
-process_twin_service = ProcessTwinService(live_twin_service)
+process_twin_service = ProcessTwinService(live_twin_service, repository=twin_repository)
 scenario_worker_service = ScenarioWorkerService(
     process_twin_service=process_twin_service,
     live_twin_service=live_twin_service,
     scenario_repository=scenario_repository,
 )
-bedrock_service = BedrockService(
-    profile_name=settings.aws_profile,
-    region_name=settings.aws_region,
-    fast_model_id=settings.bedrock_fast_model,
-    reasoning_model_id=settings.bedrock_reasoning_model,
-)
+bedrock_service = None
+if BedrockService is not None and BOTO3_AVAILABLE:
+    try:
+        bedrock_service = BedrockService(
+            profile_name=settings.aws_profile,
+            region_name=settings.aws_region,
+            fast_model_id=settings.bedrock_fast_model,
+            reasoning_model_id=settings.bedrock_reasoning_model,
+        )
+    except Exception:
+        bedrock_service = None
 live_twin_consumer = LiveTwinMqttConsumer(
     live_twin_service,
     host=settings.mqtt_host,
@@ -185,6 +193,15 @@ def get_live_twin_telemetry(
     return live_twin_service.telemetry_history(machine_id, limit=limit)
 
 
+@app.get("/api/v1/events", response_model=list[EventEnvelope])
+def list_live_twin_events(
+    limit: int = Query(default=100, ge=1, le=1000),
+    machine_id: str | None = Query(default=None),
+):
+    """Retrieve newest-first persistent plant event envelopes."""
+    return live_twin_service.list_events(limit=limit, machine_id=machine_id)
+
+
 @app.post("/api/v1/events", response_model=TwinDocument, status_code=202)
 def ingest_live_twin_event(event: EventEnvelope):
     """Internal/test ingestion route using the exact MQTT reducer path.
@@ -313,6 +330,51 @@ def run_scenario_preset(
         raise HTTPException(400, str(error)) from error
 
 
+@app.get("/api/v1/scenarios/strategies")
+def get_decision_strategies(machine_id: str = "CNC-01", quota: int = 120):
+    """Retrieve the multi-strategy comparative tradeoff matrix for a machine station."""
+    try:
+        snapshot = process_twin_service.capture_snapshot()
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from error
+
+    try:
+        run_result = scenario_worker_service.run_preset("preventive_tool_change", horizon_seconds=120)
+    except Exception as error:
+        raise HTTPException(400, str(error)) from error
+
+    reasoning_service = ScenarioReasoningService()
+    analysis = reasoning_service.analyze_scenario(run_result, snapshot=snapshot, shift_quota_target=quota)
+    return {
+        "target_machine_id": machine_id,
+        "manager_brief": analysis.manager_brief,
+        "worker_order": analysis.worker_order,
+        "strategies": analysis.strategies,
+    }
+
+
+@app.post("/api/v1/scenarios/analyze", response_model=ScenarioDecisionAnalysis)
+def analyze_scenario_decisions(payload: dict = None):
+    """Generate dual Manager + Worker decision analysis from live snapshot and multi-strategy evaluation."""
+    target_machine_id = payload.get("target_machine_id", "CNC-01") if payload else "CNC-01"
+    quota = payload.get("shift_quota_target", 120) if payload else 120
+    preset_id = payload.get("preset_id", "preventive_tool_change") if payload else "preventive_tool_change"
+    horizon = payload.get("horizon_seconds", 120.0) if payload else 120.0
+
+    try:
+        snapshot = process_twin_service.capture_snapshot()
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from error
+
+    try:
+        run_result = scenario_worker_service.run_preset(preset_id, horizon_seconds=horizon)
+    except Exception as error:
+        raise HTTPException(400, str(error)) from error
+
+    reasoning_service = ScenarioReasoningService()
+    return reasoning_service.analyze_scenario(run_result, snapshot=snapshot, shift_quota_target=quota)
+
+
 @app.get("/api/v1/scenarios/{scenario_id}", response_model=ScenarioRunResult)
 def get_scenario(scenario_id: str):
     """Retrieve detailed execution results and delta for a specific scenario."""
@@ -411,6 +473,8 @@ def reset_all():
 @app.post("/api/ai/ask")
 def ask_ai(payload: dict):
     """Interactive AI query endpoint supporting fast (Luna) and reasoning (Astra/Claude) models."""
+    if bedrock_service is None:
+        raise HTTPException(503, "AWS Bedrock integration is disabled (AWS has been removed).")
     prompt = payload.get("prompt")
     if not prompt:
         raise HTTPException(400, "Missing 'prompt' in request body")
@@ -437,9 +501,11 @@ def ask_ai(payload: dict):
 @app.post("/api/ai/diagnose-bottlenecks")
 def diagnose_bottlenecks():
     """Deep causal diagnosis of active factory bottlenecks using reasoning model."""
+    if bedrock_service is None:
+        raise HTTPException(503, "AWS Bedrock integration is disabled (AWS has been removed).")
     try:
-        bottleneck_data = process_twin_service.get_bottlenecks().model_dump()
-        machines = [m.model_dump() for m in engine.get_all_machines()]
+        bottleneck_data = process_twin_service.analyze_bottleneck().model_dump()
+        machines = [m.model_dump() for m in engine.get_all_telemetry()]
         analysis = bedrock_service.diagnose_bottleneck(bottleneck_data, machines)
         return {
             "model_id": bedrock_service.reasoning_model_id,
@@ -453,6 +519,8 @@ def diagnose_bottlenecks():
 @app.post("/api/ai/scenario-insights/{scenario_id}")
 def get_scenario_ai_insights(scenario_id: str):
     """Generate deep engineering insights for a finished scenario fork."""
+    if bedrock_service is None:
+        raise HTTPException(503, "AWS Bedrock integration is disabled (AWS has been removed).")
     scenario = scenario_repository.get_scenario(scenario_id)
     if not scenario:
         raise HTTPException(404, f"Scenario {scenario_id} not found")

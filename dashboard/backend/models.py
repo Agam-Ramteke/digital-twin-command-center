@@ -39,6 +39,9 @@ class MachineTelemetry(BaseModel):
     rpm: float
     current: float = Field(..., description="Amps")
     production_count: int
+    wip_count: int = Field(default=0, ge=0)
+    is_starved: bool = Field(default=False)
+    is_blocked: bool = Field(default=False)
     cycle_time: float = Field(..., description="seconds")
     energy_kwh: float
     health: float = Field(..., ge=0, le=100, description="Health %")
@@ -70,6 +73,7 @@ class FactorySummary(BaseModel):
     """Factory-level KPIs aggregated from all machines."""
     oee: float
     total_output: int
+    total_wip: int = Field(default=0, ge=0)
     total_energy_kwh: float
     twin_health: float
     machines_online: int

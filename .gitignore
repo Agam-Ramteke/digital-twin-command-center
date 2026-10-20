@@ -19,6 +19,12 @@ build/
 .env.*.local
 *.log
 
+# Ephemeral test captures
+/*_shot*.png
+/browser_*.png
+thesis_work/*-render*/
+thesis_work/*.png
+
 # IDE & OS
 .vscode/
 .idea/

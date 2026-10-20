@@ -332,6 +332,9 @@ class SimulatorEngine:
             rpm=sample.actual_rpm or 0.0,
             current=sample.current_a,
             production_count=sample.production_count,
+            wip_count=getattr(sample, "wip_count", 0),
+            is_starved=getattr(sample, "is_starved", False),
+            is_blocked=getattr(sample, "is_blocked", False),
             cycle_time=sample.cycle_time_s,
             energy_kwh=sample.energy_kwh,
             health=sample.health_score,
@@ -361,6 +364,7 @@ class SimulatorEngine:
                 return FactorySummary(
                     oee=0.0,
                     total_output=0,
+                    total_wip=0,
                     total_energy_kwh=0.0,
                     twin_health=0.0,
                     machines_online=0,
@@ -383,9 +387,11 @@ class SimulatorEngine:
             freshness_ms = 0.0
             if self._last_tick_wall_time is not None:
                 freshness_ms = max(0.0, (datetime.now(timezone.utc) - self._last_tick_wall_time).total_seconds() * 1000)
+            total_wip = sum(getattr(s, "wip_count", 0) for s in samples)
             return FactorySummary(
                 oee=round(availability * performance * quality * 100.0, 2),
                 total_output=line_output,
+                total_wip=total_wip,
                 total_energy_kwh=round(sum(sample.energy_kwh for sample in samples), 5),
                 twin_health=round(sum(sample.health_score for sample in samples) / len(samples), 2),
                 machines_online=online,

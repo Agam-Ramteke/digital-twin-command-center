@@ -7,7 +7,7 @@ from typing import Any
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError
 
-from domain.contracts import EventEnvelope, TwinDocument
+from domain.contracts import EventEnvelope, ProductionToken, TwinDocument
 from .twin_repository import RepositoryWriteResult
 
 
@@ -32,6 +32,7 @@ class MongoTwinRepository:
         self._twins = self._database["twins"]
         self._events = self._database["events"]
         self._telemetry = self._database["telemetry"]
+        self._tokens = self._database["production_tokens"]
         self._ensure_indexes()
 
     def ping(self) -> None:
@@ -42,6 +43,9 @@ class MongoTwinRepository:
         self._telemetry.create_index("event_id", unique=True)
         self._telemetry.create_index([("machine_id", ASCENDING), ("generated_at", DESCENDING)])
         self._twins.create_index("identity.station_index")
+        self._tokens.create_index("token_id", unique=True)
+        self._tokens.create_index([("emitted_at", DESCENDING)])
+        self._tokens.create_index("quality")
 
     @staticmethod
     def _document_for_mongo(document: TwinDocument) -> dict[str, Any]:
@@ -101,6 +105,41 @@ class MongoTwinRepository:
             raise ValueError("limit must be between 1 and 10000")
         cursor = self._telemetry.find({"machine_id": machine_id}).sort("generated_at", DESCENDING).limit(limit)
         return [EventEnvelope.model_validate(self._without_mongo_id(item)) for item in cursor]
+
+    def list_events(self, *, limit: int = 100, machine_id: str | None = None) -> list[EventEnvelope]:
+        if limit < 1 or limit > 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        query: dict[str, Any] = {}
+        if machine_id:
+            query["machine_id"] = machine_id
+        cursor = self._events.find(query).sort("generated_at", DESCENDING).limit(limit)
+        return [EventEnvelope.model_validate(self._without_mongo_id(item)) for item in cursor]
+
+    def save_token(self, token: ProductionToken) -> None:
+        doc = token.model_dump(mode="json")
+        doc["_id"] = token.token_id
+        self._tokens.replace_one({"_id": token.token_id}, doc, upsert=True)
+
+    def get_token(self, token_id: str) -> ProductionToken | None:
+        result = self._tokens.find_one({"_id": token_id})
+        return ProductionToken.model_validate(self._without_mongo_id(result)) if result else None
+
+    def list_tokens(
+        self,
+        *,
+        limit: int = 50,
+        quality: str | None = None,
+        station: str | None = None,
+    ) -> list[ProductionToken]:
+        if limit < 1 or limit > 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        query: dict[str, Any] = {}
+        if quality:
+            query["quality"] = quality
+        if station:
+            query["lineage"] = station
+        cursor = self._tokens.find(query).sort("emitted_at", DESCENDING).limit(limit)
+        return [ProductionToken.model_validate(self._without_mongo_id(item)) for item in cursor]
 
     def close(self) -> None:
         self._client.close()

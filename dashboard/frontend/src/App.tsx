@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import AppShell from './components/layout/AppShell';
 import OverviewPage from './pages/OverviewPage';
+import FactoryFloor3DPage from './pages/FactoryFloor3DPage';
 import ProductionPage from './pages/ProductionPage';
 import MachinesPage from './pages/MachinesPage';
 import MachineDetailPage from './pages/MachineDetailPage';
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<OverviewPage />} />
+          <Route path="/3d" element={<FactoryFloor3DPage />} />
           <Route path="/production" element={<ProductionPage />} />
           <Route path="/machines" element={<MachinesPage />} />
           <Route path="/machines/:machineId" element={<MachineDetailPage />} />
