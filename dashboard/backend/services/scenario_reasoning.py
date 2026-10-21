@@ -183,8 +183,8 @@ class ScenarioReasoningService:
             # Derating safely completes the shift and saves planned downtime
             s1_rec = False
             s2_rec = True
-            s1_reason = "Viable option, but derating finishes the shift with $1,440 less downtime expense."
-            s2_reason = "Recommended: Derates cutting stress by 18%, hits quota (118/120 pcs), saves $6,730 vs failure."
+            s1_reason = "Viable option, but derating finishes the shift with ₹1,19,500 less downtime expense."
+            s2_reason = "Recommended: Derates cutting stress by 18%, hits quota (118/120 pcs), saves ₹5,58,000 vs failure."
         else:
             s1_rec = True
             s2_rec = False
@@ -241,7 +241,7 @@ class ScenarioReasoningService:
                 risk_level="CRITICAL",
                 quota_met=s3_quota_met,
                 is_recommended=False,
-                recommendation_reason="Strongly discouraged: $6,900 catastrophic failure cost and misses delivery quota.",
+                recommendation_reason="Strongly discouraged: ₹5,72,000 catastrophic failure cost and misses delivery quota.",
             ),
         ]
 
@@ -265,8 +265,8 @@ class ScenarioReasoningService:
             risk_assessment=f"Operating risk under {recommended_strategy.name} is {recommended_strategy.risk_level}. Status Quo carries a 92% risk of insert shatter before shift completion.",
             key_tradeoff_summary=(
                 f"Choosing {recommended_strategy.action_label} delivers {recommended_strategy.projected_output} pcs "
-                f"with only ${recommended_strategy.total_cost_usd:.0f} in operating impact, saving "
-                f"${financial_advantage_usd:.0f} compared to an unplanned line breakdown."
+                f"with only ₹{recommended_strategy.total_cost_usd * 83:,.0f} in operating impact, saving "
+                f"₹{financial_advantage_usd * 83:,.0f} compared to an unplanned line breakdown."
             ),
             ai_reasoning_narrative=(
                 f"Digital Twin Causal Analysis for {target_machine_id}: Asset health is currently {current_health:.1f}% "
@@ -406,12 +406,12 @@ You are advising the Plant Manager and Line Maintenance Tech on a mission-critic
 - Current Asset Health: {current_health:.1f}%
 - Active Anomaly: {active_anomaly}
 - Shift Target Quota: {shift_quota} components
-- Scrap Cost: ${SCRAP_COST_PER_PART_USD:.0f}/part | Unplanned Downtime Cost: ${DOWNTIME_COST_PER_MINUTE_USD:.0f}/minute
+- Scrap Cost: ₹{SCRAP_COST_PER_PART_USD * 83:,.0f}/part | Unplanned Downtime Cost: ₹{DOWNTIME_COST_PER_MINUTE_USD * 83:,.0f}/minute
 
 [SIMULATED SCENARIO STRATEGIES]
-1. {strategies[0].name}: Output={strategies[0].projected_output} pcs, Scrap={strategies[0].scrap_count}, Total Cost=${strategies[0].total_cost_usd:.0f}, Quota Met={strategies[0].quota_met}
-2. {strategies[1].name}: Output={strategies[1].projected_output} pcs, Scrap={strategies[1].scrap_count}, Total Cost=${strategies[1].total_cost_usd:.0f}, Quota Met={strategies[1].quota_met}
-3. {strategies[2].name}: Output={strategies[2].projected_output} pcs, Scrap={strategies[2].scrap_count}, Total Cost=${strategies[2].total_cost_usd:.0f}, Quota Met={strategies[2].quota_met}
+1. {strategies[0].name}: Output={strategies[0].projected_output} pcs, Scrap={strategies[0].scrap_count}, Total Cost=₹{strategies[0].total_cost_usd * 83:,.0f}, Quota Met={strategies[0].quota_met}
+2. {strategies[1].name}: Output={strategies[1].projected_output} pcs, Scrap={strategies[1].scrap_count}, Total Cost=₹{strategies[1].total_cost_usd * 83:,.0f}, Quota Met={strategies[1].quota_met}
+3. {strategies[2].name}: Output={strategies[2].projected_output} pcs, Scrap={strategies[2].scrap_count}, Total Cost=₹{strategies[2].total_cost_usd * 83:,.0f}, Quota Met={strategies[2].quota_met}
 
 Synthesize a concise 3-point briefing:
 1. Executive Decision Recommendation with ROI rationale.

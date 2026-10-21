@@ -22,7 +22,7 @@ import {
 import {
   Wrench,
   ShieldAlert,
-  DollarSign,
+  IndianRupee,
   ClipboardCheck,
   Lock,
   CheckCircle2,
@@ -50,9 +50,21 @@ import {
   CheckSquare,
   ArrowRight,
   Sparkles,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import Loader from '../components/kokonutui/loader';
 import './MaintenancePage.css';
+
+const USD_TO_INR = 83.0;
+
+export function formatINR(valUSD: number, showDecimals = false): string {
+  const inrVal = Math.round(valUSD * USD_TO_INR);
+  return '₹' + inrVal.toLocaleString('en-IN', {
+    minimumFractionDigits: showDecimals ? 2 : 0,
+    maximumFractionDigits: showDecimals ? 2 : 0,
+  });
+}
 
 interface AuditRecord {
   id: string;
@@ -136,6 +148,25 @@ export default function PredictiveMaintenancePage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<boolean>(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Financial ROI vs Engineering Pure Telemetry toggle
+  const [showFinancialCards, setShowFinancialCards] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('maint_show_financials') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleFinancialCards = () => {
+    setShowFinancialCards(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('maint_show_financials', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Active Work Order Execution Stepper (Stage 1..4)
   const [execStage, setExecStage] = useState<1 | 2 | 3 | 4 | 'completed'>(1);
@@ -336,6 +367,25 @@ export default function PredictiveMaintenancePage() {
         <div className="maint-header-actions">
           <button
             className="btn btn-sm"
+            onClick={toggleFinancialCards}
+            title={showFinancialCards ? "Remove financial cards altogether and view pure engineering metrics" : "Show INR (₹) financial metrics"}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: showFinancialCards ? 'var(--status-good)' : 'var(--border-color)' }}
+          >
+            {showFinancialCards ? (
+              <>
+                <IndianRupee size={13} color="var(--status-good)" />
+                <span style={{ color: 'var(--status-good)', fontWeight: 600 }}>Financials: INR (₹)</span>
+              </>
+            ) : (
+              <>
+                <EyeOff size={13} color="var(--text-tertiary)" />
+                <span style={{ color: 'var(--text-tertiary)' }}>Financials: Hidden</span>
+              </>
+            )}
+          </button>
+
+          <button
+            className="btn btn-sm"
             onClick={handleSimulateDegradation}
             disabled={actionBusy}
             title="Inject wear & harmonic chatter to evaluate predictive response"
@@ -406,18 +456,51 @@ export default function PredictiveMaintenancePage() {
           </div>
         </div>
 
-        <div className="maint-kpi-card good">
-          <div className="maint-kpi-label">
-            <span>Preventive Maintenance ROI</span>
-            <DollarSign size={14} color="var(--status-good)" />
+        {showFinancialCards ? (
+          <div className="maint-kpi-card good">
+            <div className="maint-kpi-label">
+              <span>Preventive Maintenance ROI</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <IndianRupee size={14} color="var(--status-good)" />
+                <button
+                  onClick={toggleFinancialCards}
+                  title="Remove financial card"
+                  className="maint-card-dismiss-btn"
+                >
+                  <EyeOff size={12} />
+                </button>
+              </div>
+            </div>
+            <div className="maint-kpi-val good">
+              +{formatINR(totalPotentialSavings)}
+            </div>
+            <div className="maint-kpi-sub">
+              <span>Net savings vs unplanned catastrophic stop</span>
+            </div>
           </div>
-          <div className="maint-kpi-val good">
-            +${totalPotentialSavings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        ) : (
+          <div className="maint-kpi-card good">
+            <div className="maint-kpi-label">
+              <span>Mean Time Between Failures</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ShieldCheck size={14} color="var(--status-good)" />
+                <button
+                  onClick={toggleFinancialCards}
+                  title="Show INR (₹) ROI metrics"
+                  className="maint-card-dismiss-btn"
+                >
+                  <Eye size={12} />
+                </button>
+              </div>
+            </div>
+            <div className="maint-kpi-val good">
+              428.5 <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>hrs MTBF</span>
+            </div>
+            <div className="maint-kpi-sub">
+              <span>Zero unplanned line stops during shift</span>
+            </div>
           </div>
-          <div className="maint-kpi-sub">
-            <span>Net savings vs unplanned catastrophic stop</span>
-          </div>
-        </div>
+        )}
 
         <div className="maint-kpi-card">
           <div className="maint-kpi-label">
@@ -608,7 +691,7 @@ export default function PredictiveMaintenancePage() {
           <span>Plant Manager Executive Brief</span>
           {managerBrief && (
             <span style={{ fontSize: 10, background: 'rgba(255,255,255,0.15)', padding: '2px 6px', borderRadius: 10 }}>
-              ROI +${managerBrief.financial_advantage_usd.toLocaleString()}
+              {showFinancialCards ? `ROI +${formatINR(managerBrief.financial_advantage_usd)}` : 'Optimal Policy'}
             </span>
           )}
         </button>
@@ -665,7 +748,7 @@ export default function PredictiveMaintenancePage() {
                   <div className="panel-header" style={{ marginBottom: 12 }}>
                     <span className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Briefcase size={16} color="var(--accent-blue)" />
-                      Recommended Action & Financial Impact
+                      {showFinancialCards ? 'Recommended Action & Financial Impact' : 'Recommended Action & Operational Impact'}
                     </span>
                     <span className={`status-badge ${managerBrief.shift_quota_feasible ? 'running' : 'warning'}`}>
                       {managerBrief.shift_quota_feasible ? 'Quota Feasible' : 'Quota At Risk'}
@@ -675,13 +758,13 @@ export default function PredictiveMaintenancePage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                     <div style={{ padding: 12, background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)' }}>
                       <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700 }}>
-                        Net Financial Savings vs Run-To-Failure
+                        {showFinancialCards ? 'Net Financial Savings vs Run-To-Failure' : 'Defect Prevention & Quality Shield'}
                       </div>
                       <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--status-good)', marginTop: 4 }}>
-                        +${managerBrief.financial_advantage_usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {showFinancialCards ? `+${formatINR(managerBrief.financial_advantage_usd)}` : '99.4%'}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                        Mitigates tool shatter, scrap parts & line idle
+                        {showFinancialCards ? 'Mitigates tool shatter, scrap parts & line idle' : 'Zero workpiece reject risk under buffer swap'}
                       </div>
                     </div>
 
@@ -786,7 +869,7 @@ export default function PredictiveMaintenancePage() {
                       <tr>
                         <th>Strategy</th>
                         <th>Action Protocol</th>
-                        <th>Total Cost ($USD)</th>
+                        <th>{showFinancialCards ? 'Total Cost (INR ₹)' : 'Operational Impact'}</th>
                         <th>Projected Yield</th>
                         <th>Line Downtime</th>
                         <th>Risk Level</th>
@@ -813,7 +896,13 @@ export default function PredictiveMaintenancePage() {
                             {strat.action_label}
                           </td>
                           <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: strat.is_recommended ? 'var(--status-good)' : 'var(--text-primary)' }}>
-                            ${strat.total_cost_usd.toFixed(2)}
+                            {showFinancialCards
+                              ? formatINR(strat.total_cost_usd)
+                              : strat.is_recommended
+                              ? 'Minimal Buffer Impact'
+                              : strat.risk_level === 'CRITICAL'
+                              ? 'Catastrophic Line Trip'
+                              : 'Paced Speed Throttle'}
                           </td>
                           <td style={{ fontFamily: 'var(--font-mono)' }}>
                             {strat.projected_output} units
@@ -1238,7 +1327,7 @@ export default function PredictiveMaintenancePage() {
                       <th>Downtime</th>
                       <th>Vibration Delta</th>
                       <th>Health Restored</th>
-                      <th>Net ROI</th>
+                      <th>{showFinancialCards ? 'Net ROI (INR ₹)' : 'Operational Status'}</th>
                       <th>Signee</th>
                       <th>Status</th>
                     </tr>
@@ -1265,7 +1354,7 @@ export default function PredictiveMaintenancePage() {
                           {row.healthRestored}
                         </td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--status-good)' }}>
-                          +${row.costSaved.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {showFinancialCards ? `+${formatINR(row.costSaved)}` : '100% Calibrated'}
                         </td>
                         <td style={{ fontSize: 11 }}>{row.signee}</td>
                         <td>

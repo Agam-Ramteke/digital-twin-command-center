@@ -128,6 +128,23 @@
   gap: 4px;
 }
 
+.maint-card-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.maint-card-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
 /* Fleet Machine Grid */
 .maint-fleet-grid {
   display: grid;
