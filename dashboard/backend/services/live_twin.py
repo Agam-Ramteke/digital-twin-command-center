@@ -56,6 +56,10 @@ class LiveTwinService:
     def __init__(self, repository: TwinRepository) -> None:
         self._repository = repository
 
+    @property
+    def repository(self) -> TwinRepository:
+        return self._repository
+
     def consume(
         self,
         event: EventEnvelope,
@@ -113,6 +117,9 @@ class LiveTwinService:
     def telemetry_history(self, machine_id: str, *, limit: int = 100) -> list[EventEnvelope]:
         return self._repository.list_telemetry(machine_id, limit=limit)
 
+    def list_events(self, *, limit: int = 100, machine_id: str | None = None) -> list[EventEnvelope]:
+        return self._repository.list_events(limit=limit, machine_id=machine_id)
+
     @staticmethod
     def _reduce_telemetry(
         *,
@@ -162,6 +169,8 @@ class LiveTwinService:
             ),
             production=ProductionState(
                 cumulative_output=telemetry.production_count,
+                wip_count=getattr(telemetry, "wip_count", 0),
+                is_starved=getattr(telemetry, "is_starved", False),
                 latest_quality_score=telemetry.quality_score,
                 latest_token_id=existing.production.latest_token_id if existing else None,
             ),

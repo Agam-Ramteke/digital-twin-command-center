@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: factory-twin
+  labels:
+    app: mosquitto
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:latest
+          ports:
+            - containerPort: 1883
+              name: mqtt-tcp
+            - containerPort: 9001
+              name: mqtt-ws
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: mosquitto-config
+              mountPath: /mosquitto/config/mosquitto.conf
+              subPath: mosquitto.conf
+      volumes:
+        - name: mosquitto-config
+          configMap:
+            name: factory-twin-config
+            items:
+              - key: mosquitto.conf
+                path: mosquitto.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: factory-twin
+  labels:
+    app: mosquitto
+spec:
+  ports:
+    - port: 1883
+      targetPort: 1883
+      name: mqtt-tcp
+    - port: 9001
+      targetPort: 9001
+      name: mqtt-ws
+  selector:
+    app: mosquitto

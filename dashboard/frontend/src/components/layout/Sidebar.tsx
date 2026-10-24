@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Box,
   Factory,
   Cpu,
   GitFork,
@@ -12,31 +13,32 @@ import {
 
 const NAV = [
   {
-    group: 'DIGITAL TWIN',
+    group: 'COMMAND CENTER',
     items: [
-      { to: '/', label: 'Overview', icon: LayoutDashboard },
+      { to: '/', label: 'Fleet Overview', icon: LayoutDashboard },
+      { to: '/3d', label: '3D Virtual Factory', icon: Box },
+      { to: '/twin', label: 'Digital Twin Studio', icon: GitFork },
     ],
   },
   {
     group: 'OPERATIONS',
     items: [
-      { to: '/production', label: 'Production', icon: Factory },
-      { to: '/machines', label: 'Machines', icon: Cpu },
+      { to: '/production', label: 'Production & DAG', icon: Factory },
+      { to: '/machines', label: 'Machine Fleet', icon: Cpu },
     ],
   },
   {
-    group: 'INTELLIGENCE',
+    group: 'DIAGNOSTICS',
     items: [
-      { to: '/twin', label: 'Digital Twin', icon: GitFork },
       { to: '/maintenance', label: 'Predictive Maintenance', icon: Wrench },
-      { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+      { to: '/analytics', label: 'Fleet Analytics', icon: BarChart3 },
     ],
   },
   {
-    group: 'SYSTEM',
+    group: 'PLATFORM',
     items: [
-      { to: '/events', label: 'Events', icon: ScrollText },
-      { to: '/system', label: 'System', icon: Settings },
+      { to: '/events', label: 'Events Stream', icon: ScrollText },
+      { to: '/system', label: 'System & Infra', icon: Settings },
     ],
   },
 ];
@@ -62,7 +64,7 @@ export default function Sidebar() {
                   `sidebar-link${isActive ? ' active' : ''}`
                 }
               >
-                <item.icon />
+                <item.icon size={16} />
                 {item.label}
               </NavLink>
             ))}
@@ -71,7 +73,7 @@ export default function Sidebar() {
       </div>
 
       <div className="sidebar-footer">
-        v0.1.0 — Prototype
+        v0.4.0 — Active Digital Twin
       </div>
     </nav>
   );

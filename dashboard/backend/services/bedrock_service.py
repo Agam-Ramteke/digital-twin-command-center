@@ -10,8 +10,16 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, AsyncIterator, Iterator, Optional
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+
+try:
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+    BOTO3_AVAILABLE = True
+except ImportError:  # pragma: no cover - AWS removed
+    boto3 = None  # type: ignore[assignment]
+    BotoCoreError = Exception  # type: ignore[misc, assignment]
+    ClientError = Exception  # type: ignore[misc, assignment]
+    BOTO3_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +39,8 @@ class BedrockService:
         self._client: Optional[Any] = None
 
     def _get_client(self) -> Any:
+        if not BOTO3_AVAILABLE or boto3 is None:
+            raise RuntimeError("boto3 is not installed; AWS Bedrock service is unavailable.")
         if self._client is None:
             try:
                 session = boto3.Session(

@@ -1,9 +1,8 @@
 # Digital Twin Orchestration Platform — Build Progress
 
-**Last updated:** 2026-09-20  
-**Current phase:** 6 — Container and Kubernetes deployment  
-**Next executable task:** Containerize application (Dockerfiles for backend, frontend, mosquitto),
-configure Docker Compose full stack, and create Kubernetes manifests with health/readiness probes.
+**Last updated:** 2026-10-20  
+**Current phase:** 7 — Observability and experiments  
+**Next executable task:** Metric collection, automated fault/network/scaling benchmark scripts, result export and charts.
 
 ## Project goal
 
@@ -76,7 +75,7 @@ Key rules:
 | 3 | Process Twin | Frozen snapshot, production tokens, DAG, bottleneck and defect tracing APIs | **Complete** |
 | 4 | Scenario Worker | Snapshot API, isolated forward simulation, scenario result persistence and UI | **Complete** |
 | 5 | Dashboard integration | Remove experiment-mode mock fallback, wire all APIs, show lineage/measurement status | **Complete** |
-| 6 | Container and Kubernetes deployment | Docker images, Compose dev stack, manifests, health/readiness, resource limits | Not started |
+| 6 | Container and Kubernetes deployment | Docker images, Compose dev stack, manifests, health/readiness, resource limits | **Complete** |
 | 7 | Observability and experiments | Metric collection, fault/network/scaling scripts, result export and charts | Not started |
 | 8 | Research closeout | Populate report results/figures, revise claims, reproducibility package | Not started |
 
@@ -348,3 +347,42 @@ When resuming this project, read this file first, then:
 
 
 
+
+### 2026-10-20 — Remediation & Phase 6 complete
+
+- Decoupled AWS Bedrock remnants: safe optional `boto3` import guards in `services/__init__.py` and `bedrock_service.py`, gated `/api/ai/*` routes with 503 fallback in `main.py`, and cleaned `boto3`/`awscrt` from `requirements.txt`.
+- Fixed `STAMPING-01` nominal RPM alignment in `simulation/causal.py` (`nominal_rpm=1200.0`), eliminating false out-of-tolerance alarms in the UI.
+- Standardized finished production line output calculation on `ProductionPage.tsx` using `summary.total_output`.
+- Implemented durable `production_tokens` collection in `MongoTwinRepository` and `TwinRepository` interface.
+- Exposed `GET /api/v1/events` endpoint in `main.py` and connected `EventsPage.tsx` directly to the live event log with full filtering and search.
+- Added multi-stage `dashboard/backend/Dockerfile` with healthcheck on `/health`.
+- Added multi-stage `dashboard/frontend/Dockerfile` with Nginx reverse proxy and SPA routing (`nginx.conf`).
+- Upgraded `dashboard/docker-compose.yml` to full stack: Mosquitto broker, MongoDB 7.0 database, FastAPI backend, and React frontend with health checks and network dependencies.
+- Created complete Kubernetes deployment package in `dashboard/k8s/`: namespace, configmap, MongoDB statefulset, Mosquitto deployment, backend deployment (with `/health` liveness and `/ready` readiness probes), frontend deployment, ingress, and kustomization.
+- **Verification:** `npm run build` in `frontend/` passed with 0 errors (`tsc && vite build`);
+  `python -m unittest discover -s tests -v` in `backend/` passed all 47 tests (45 passed, 2 Bedrock skipped).
+- **Next task:** implement Phase 7 — Observability and experiments (metric collection, scaling benchmarks, result export).
+
+
+### 2026-10-20 — Material Flow Coupling, WIP Buffering & Digital Twin Studio Redesign
+
+- **Causal Material Flow Coupling**: Linked the 5 factory stations (`STAMPING-01` -> `CNC-01` -> `WELDING-01` -> `INSPECTION-01` -> `PACKAGING-01`) into a physically constrained material pipeline in `simulation/causal.py`.
+- **Starvation and Buffer Blocking Constraints**:
+  - Implemented upstream starvation guard in `CausalStation._advance_production`: downstream stations cannot cycle or produce unless upstream has delivered work-in-progress.
+  - Implemented downstream buffer blocking guard (`max_buffer=5`): upstream machines pause when buffers are full, preventing runaway production ahead of the 42s bottleneck (`CNC-01`).
+  - Enforced strict physical invariant across all times: Output(Packaging) <= Output(Inspection) <= Output(Welding) <= Output(CNC) <= Output(Stamping).
+- **Domain Contracts & Telemetry Schema Updates**:
+  - Added `wip_count: int`, `is_starved: bool`, and `is_blocked: bool` to `TelemetryPayload`, `MachineTelemetry`, and `ProductionState`.
+  - Added `total_wip: int` to `FactorySummary` reflecting total work-in-progress queued along the line.
+- **Digital Twin Studio Redesign (`DigitalTwinPage.tsx`)**:
+  - Redesigned into a unified 3-tab command center:
+    - **Live Twin Cockpit**: Real-time station cards with live health, vibration, temperature, output, WIP infeed counts, starvation indicators, and 1-click fault injection/reset actions.
+    - **What-If Scenario Studio**: 1-click counterfactual forward simulations with 4 intervention presets (Preventive Tool Change, Coolant Failure, Cadence Boost, Electrode Drift), delta cards, and station comparison matrix.
+    - **Process DAG & Material Lineage**: Visual DAG pipeline with WIP buffer gauges between stations and live discrete production token lineage stream.
+- **Overview & Production Flow Integration**:
+  - Enhanced `OverviewPage.tsx` and `ProductionPage.tsx` with inter-station WIP queue indicators on flow connectors (`4 WIP`, `1 WIP`, etc.) and `STARVED` / `BLOCKED` status tags.
+  - Updated `Sidebar.tsx` navigation groups and updated version badge to `v0.4.0 — Active Digital Twin`.
+- **Regression Verification**:
+  - Added unit test `test_material_flow_conservation_along_sequential_line` in `tests/test_causal_models.py`.
+  - All 48 test suites passed in `backend/` (`Ran 48 tests in 32.8s, OK (skipped=2)`).
+  - Production frontend build `npm run build` passed with 0 errors.

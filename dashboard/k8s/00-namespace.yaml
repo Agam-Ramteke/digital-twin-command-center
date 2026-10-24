@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: factory-twin
+  labels:
+    app.kubernetes.io/name: digital-twin-platform
+    app.kubernetes.io/part-of: digital-twin-command-center

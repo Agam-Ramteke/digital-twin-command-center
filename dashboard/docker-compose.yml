@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   mosquitto:
     image: eclipse-mosquitto:latest
@@ -8,3 +10,85 @@ services:
       - "9001:9001"
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - twin_net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 mosquitto_sub -t '$$SYS/#' -C 1 || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb:
+    image: mongo:7.0
+    container_name: digital_twin_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - twin_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: digital_twin_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PERSISTENCE_BACKEND=mongo
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=digital_twin
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_LIVE_TWIN_ENABLED=true
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - twin_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8000
+        - VITE_MQTT_WS_URL=ws://localhost:9001
+    container_name: digital_twin_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - twin_net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  mongo_data:
+
+networks:
+  twin_net:
+    driver: bridge

@@ -1,87 +1,92 @@
-import { useMachines } from '../hooks/usePolling';
-import type { FactoryEvent } from '../types';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useEvents, useMachines } from '../hooks/usePolling';
+import type { FactoryEvent, StationType } from '../types';
+import { useState, useMemo } from 'react';
 
-/** Generate events from live telemetry state changes. */
-function generateEvents(machines: ReturnType<typeof useMachines>['data']): FactoryEvent[] {
-  if (!machines) return [];
-  const events: FactoryEvent[] = [];
-  const now = new Date();
+/** Map backend EventEnvelope records into FactoryEvent view models */
+function parseEnvelopeToEvent(item: any): FactoryEvent {
+  const payload = item.payload || {};
+  const status = payload.status || 'RUNNING';
+  const station: StationType = payload.station || item.machine_id?.split('-')[0] || 'CNC';
+  const hasFault = Boolean(payload.fault_code);
+  const isDegraded = status === 'DEGRADED' || status === 'WARNING';
+  const isCritical = status === 'FAULT' || hasFault;
 
-  for (const m of machines) {
-    // Status-based events
-    if (m.status === 'DEGRADED' || m.status === 'FAULT') {
-      events.push({
-        id: `${m.machine_id}-degraded`,
-        timestamp: new Date(now.getTime() - 5000).toISOString(),
-        machine_id: m.machine_id,
-        station: m.station,
-        type: 'Condition',
-        severity: 'Warning',
-        description: `Machine in ${m.status} state`,
-        status: 'Open',
-      });
-    }
-    if (m.status === 'WARNING') {
-      events.push({
-        id: `${m.machine_id}-warning`,
-        timestamp: new Date(now.getTime() - 15000).toISOString(),
-        machine_id: m.machine_id,
-        station: m.station,
-        type: 'Condition',
-        severity: 'Warning',
-        description: 'Performance warning detected',
-        status: 'Open',
-      });
-    }
-    if (m.anomaly_score > 0.4) {
-      events.push({
-        id: `${m.machine_id}-anomaly`,
-        timestamp: new Date(now.getTime() - 30000).toISOString(),
-        machine_id: m.machine_id,
-        station: m.station,
-        type: 'Condition',
-        severity: m.anomaly_score > 0.6 ? 'Warning' : 'Info',
-        description: `Anomaly score elevated: ${m.anomaly_score}`,
-        status: 'Open',
-      });
-    }
-    if (m.tool_wear !== null && m.tool_wear > 60) {
-      events.push({
-        id: `${m.machine_id}-toolwear`,
-        timestamp: new Date(now.getTime() - 20000).toISOString(),
-        machine_id: m.machine_id,
-        station: m.station,
-        type: 'Maintenance',
-        severity: 'Warning',
-        description: `Tool wear at ${m.tool_wear.toFixed(0)}%`,
-        status: 'Open',
-      });
-    }
-    // Normal production event
-    events.push({
-      id: `${m.machine_id}-prod-${m.production_count}`,
-      timestamp: new Date(now.getTime() - 60000).toISOString(),
-      machine_id: m.machine_id,
-      station: m.station,
-      type: 'Production',
-      severity: 'Info',
-      description: `Output: ${m.production_count} pcs`,
-      status: 'Closed',
-    });
+  let severity: 'Info' | 'Warning' | 'Error' = 'Info';
+  if (isCritical) severity = 'Error';
+  else if (isDegraded || (payload.anomaly_score && payload.anomaly_score > 0.4)) severity = 'Warning';
+
+  let type: 'Condition' | 'Production' | 'System' | 'Maintenance' = 'System';
+  if (isCritical || isDegraded) type = 'Condition';
+  else if (payload.tool_wear_percent && payload.tool_wear_percent > 60) type = 'Maintenance';
+  else if (item.kind === 'production') type = 'Production';
+
+  let description = `Sequence #${item.sequence ?? 0} telemetry received`;
+  if (payload.fault_code) {
+    description = `Fault detected: ${payload.fault_code} (Status: ${status})`;
+  } else if (status === 'DEGRADED') {
+    description = `Performance degradation observed (Health: ${payload.health_score ?? 0}%)`;
+  } else if (payload.anomaly_score && payload.anomaly_score > 0.4) {
+    description = `Anomaly score elevated: ${payload.anomaly_score.toFixed(2)}`;
+  } else if (payload.tool_wear_percent && payload.tool_wear_percent > 60) {
+    description = `High tool wear: ${payload.tool_wear_percent.toFixed(0)}%`;
+  } else if (payload.production_count !== undefined) {
+    description = `Production count updated: ${payload.production_count} pcs`;
   }
 
-  return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return {
+    id: item.event_id || `${item.machine_id}-${item.sequence}`,
+    timestamp: item.generated_at || new Date().toISOString(),
+    machine_id: item.machine_id,
+    station,
+    type,
+    severity,
+    description,
+    status: isCritical || isDegraded ? 'Open' : 'Closed',
+  };
 }
 
 export default function EventsPage() {
+  const { data: rawEvents } = useEvents(2000, 100);
   const { data: machines } = useMachines(2000);
   const [filterMachine, setFilterMachine] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterType, setFilterType] = useState('');
   const [search, setSearch] = useState('');
 
-  const events = useMemo(() => generateEvents(machines), [machines]);
+  const events: FactoryEvent[] = useMemo(() => {
+    if (rawEvents && Array.isArray(rawEvents) && rawEvents.length > 0) {
+      return rawEvents.map(parseEnvelopeToEvent);
+    }
+    // Fallback if no backend events yet
+    if (!machines) return [];
+    const fallbackList: FactoryEvent[] = [];
+    const now = new Date();
+    for (const m of machines) {
+      if (m.status === 'DEGRADED' || m.status === 'FAULT') {
+        fallbackList.push({
+          id: `${m.machine_id}-degraded`,
+          timestamp: now.toISOString(),
+          machine_id: m.machine_id,
+          station: m.station,
+          type: 'Condition',
+          severity: m.status === 'FAULT' ? 'Error' : 'Warning',
+          description: `Machine in ${m.status} state`,
+          status: 'Open',
+        });
+      }
+      fallbackList.push({
+        id: `${m.machine_id}-prod-${m.production_count}`,
+        timestamp: now.toISOString(),
+        machine_id: m.machine_id,
+        station: m.station,
+        type: 'Production',
+        severity: 'Info',
+        description: `Output: ${m.production_count} pcs`,
+        status: 'Closed',
+      });
+    }
+    return fallbackList;
+  }, [rawEvents, machines]);
 
   const filtered = useMemo(() => {
     return events.filter(e => {
@@ -99,7 +104,7 @@ export default function EventsPage() {
     <>
       <div className="page-header">
         <h2>Events</h2>
-        <p>Centralized event log — {filtered.length} events</p>
+        <p>Centralized plant event log — {filtered.length} live events recorded</p>
       </div>
 
       <div className="events-filters">
@@ -142,29 +147,37 @@ export default function EventsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(e => (
-              <tr key={e.id}>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
-                  {new Date(e.timestamp).toLocaleTimeString('en-GB', { hour12: false })}
-                </td>
-                <td className="table-machine-id">
-                  <div>{e.machine_id}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 'normal' }}>{e.station}</div>
-                </td>
-                <td>{e.type}</td>
-                <td>
-                  <span className={`status-badge ${e.severity === 'Error' ? 'degraded' : e.severity === 'Warning' ? 'warning' : 'running'}`}>
-                    {e.severity}
-                  </span>
-                </td>
-                <td>{e.description}</td>
-                <td>
-                  <span className={`status-badge ${e.status === 'Open' ? 'warning' : 'running'}`}>
-                    {e.status}
-                  </span>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 'var(--space-md)' }}>
+                  No events recorded matching current filters.
                 </td>
               </tr>
-            ))}
+            ) : (
+              filtered.map(e => (
+                <tr key={e.id}>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
+                    {new Date(e.timestamp).toLocaleTimeString('en-GB', { hour12: false })}
+                  </td>
+                  <td className="table-machine-id">
+                    <div>{e.machine_id}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 'normal' }}>{e.station}</div>
+                  </td>
+                  <td>{e.type}</td>
+                  <td>
+                    <span className={`status-badge ${e.severity === 'Error' ? 'degraded' : e.severity === 'Warning' ? 'warning' : 'running'}`}>
+                      {e.severity}
+                    </span>
+                  </td>
+                  <td>{e.description}</td>
+                  <td>
+                    <span className={`status-badge ${e.status === 'Open' ? 'warning' : 'running'}`}>
+                      {e.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

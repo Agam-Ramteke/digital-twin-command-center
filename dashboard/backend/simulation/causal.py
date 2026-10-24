@@ -60,7 +60,7 @@ class SimulationTick:
 
 
 DEFAULT_STATIONS: tuple[StationConfig, ...] = (
-    StationConfig("STAMPING-01", StationType.STAMPING, 1, 8.5),
+        StationConfig("STAMPING-01", StationType.STAMPING, 1, 8.5, nominal_rpm=1200.0),
     StationConfig("CNC-01", StationType.CNC, 2, 42.0, nominal_rpm=3400.0),
     StationConfig("WELDING-01", StationType.WELDING, 3, 15.0),
     StationConfig("INSPECTION-01", StationType.INSPECTION, 4, 6.0),
@@ -89,6 +89,16 @@ class CausalStation:
         self.energy_kwh = 0.0
         self._last_status = MachineStatus.RUNNING
         self.cycle_time_multiplier = 1.0
+        self._upstream_station: CausalStation | None = None
+        self._downstream_station: CausalStation | None = None
+        self._max_buffer: int = 5
+
+    def set_upstream_station(self, upstream: CausalStation | None) -> None:
+        self._upstream_station = upstream
+
+    def set_downstream_station(self, downstream: CausalStation | None, *, max_buffer: int = 5) -> None:
+        self._downstream_station = downstream
+        self._max_buffer = max_buffer
 
     @property
     def machine_id(self) -> str:
@@ -299,6 +309,10 @@ class CausalStation:
         status = self._status_for_fault_factor(values["fault_factor"])
         self._last_status = status
 
+        wip_count = max(0, self._upstream_station.production_count - self.production_count) if self._upstream_station else 0
+        is_starved = bool(self._upstream_station and self.production_count >= self._upstream_station.production_count)
+        is_blocked = bool(self._downstream_station and (self.production_count - self._downstream_station.production_count >= self._max_buffer))
+
         return TelemetryPayload(
             machine_id=self.machine_id,
             station=self.station,
@@ -317,6 +331,9 @@ class CausalStation:
             cycle_time_s=round(values["cycle_time_s"], 3),
             energy_kwh=round(self.energy_kwh, 6),
             production_count=self.production_count,
+            wip_count=wip_count,
+            is_starved=is_starved,
+            is_blocked=is_blocked,
             health_score=round(values["health_score"], 3),
             anomaly_score=round(values["anomaly_score"], 4),
             quality_score=round(values["quality_score"], 5),
@@ -385,10 +402,33 @@ class CausalStation:
             OperationalState.OFFLINE,
         }:
             return
+
+        # Upstream material constraint (starvation):
+        # A downstream station cannot process or finish a part if its upstream station
+        # has not yet completed a part for it to work on.
+        if self._upstream_station is not None:
+            if self.production_count >= self._upstream_station.production_count:
+                self._cycle_elapsed_s = 0.0
+                return
+
+        # Downstream buffer constraint (blocking):
+        # If the inter-station buffer is full, hold until downstream consumes a part.
+        if self._downstream_station is not None:
+            if self.production_count - self._downstream_station.production_count >= self._max_buffer:
+                return
+
         self._cycle_elapsed_s += dt_s
         while self._cycle_elapsed_s >= cycle_time_s:
+            if self._upstream_station is not None and self.production_count >= self._upstream_station.production_count:
+                self._cycle_elapsed_s = 0.0
+                break
+            if self._downstream_station is not None and (self.production_count - self._downstream_station.production_count >= self._max_buffer):
+                break
             self.production_count += 1
             self._cycle_elapsed_s -= cycle_time_s
+            if self._upstream_station is not None and self.production_count >= self._upstream_station.production_count:
+                self._cycle_elapsed_s = 0.0
+                break
 
     @staticmethod
     def _energy_increment_kwh(current_a: float, dt_s: float) -> float:
@@ -841,6 +881,14 @@ class CausalFactory:
             self.models[config.machine_id] = build_station(config, seed=machine_seed)
             self._sequences[config.machine_id] = 0
 
+        # Link sequential station pipeline for material flow conservation
+        ordered_stations = sorted(self.models.values(), key=lambda s: s.config.station_index)
+        for i in range(len(ordered_stations)):
+            if i > 0:
+                ordered_stations[i].set_upstream_station(ordered_stations[i - 1])
+            if i < len(ordered_stations) - 1:
+                ordered_stations[i].set_downstream_station(ordered_stations[i + 1], max_buffer=5)
+
     def apply_command(self, machine_id: str, command: CommandRequest) -> None:
         try:
             self.models[machine_id].apply_command(command)
@@ -851,9 +899,10 @@ class CausalFactory:
         if dt_s <= 0:
             raise ValueError("dt_s must be positive")
         self.current_time += timedelta(seconds=dt_s)
+        ordered_stations = sorted(self.models.values(), key=lambda s: s.config.station_index)
         telemetry_by_machine: dict[str, TelemetryPayload] = {}
         inspection_model: InspectionStation | None = None
-        for station in self.models.values():
+        for station in ordered_stations:
             if isinstance(station, InspectionStation):
                 inspection_model = station
                 continue

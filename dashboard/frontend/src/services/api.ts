@@ -13,6 +13,10 @@ import type {
   DefectAttributionReport,
   ScenarioRunResult,
   ScenarioPreset,
+  ScenarioDecisionAnalysis,
+  ManagerExecutiveBrief,
+  WorkerWorkOrder,
+  DecisionStrategy,
 } from '../types';
 import { clientSim } from './mockSimulator';
 
@@ -117,6 +121,11 @@ export const api = {
   getLiveTwin: (machineId: string) => request<TwinDocument>(`/api/v1/twins/${machineId}`),
   getLiveTwinTelemetry: (machineId: string, limit = 100) =>
     request<any[]>(`/api/v1/twins/${machineId}/telemetry?limit=${limit}`),
+  getEvents: (limit = 100, machineId?: string) => {
+    const qs = new URLSearchParams({ limit: limit.toString() });
+    if (machineId) qs.set('machine_id', machineId);
+    return request<any[]>(`/api/v1/events?${qs.toString()}`);
+  },
 
   // ---------------------------------------------------------------------------
   // Phase 3 — Versioned Process Twin & DAG API
@@ -160,4 +169,14 @@ export const api = {
     request<{ status: string; scenario_id: string }>(`/api/v1/scenarios/${scenarioId}`, {
       method: 'DELETE',
     }),
+  analyzeScenarioDecisions: (payload?: { target_machine_id?: string; shift_quota_target?: number; preset_id?: string; horizon_seconds?: number }) =>
+    request<ScenarioDecisionAnalysis>('/api/v1/scenarios/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    }),
+  getDecisionStrategies: (machineId = 'CNC-01', quota = 120) =>
+    request<{ target_machine_id: string; manager_brief: ManagerExecutiveBrief; worker_order: WorkerWorkOrder; strategies: DecisionStrategy[] }>(
+      `/api/v1/scenarios/strategies?machine_id=${machineId}&quota=${quota}`
+    ),
 };

@@ -34,7 +34,7 @@ export default function ProductionPage() {
 
   useEffect(() => {
     if (!machines) return;
-    const total = machines.reduce((s, m) => s + m.production_count, 0);
+    const total = summary?.total_output ?? (machines.length > 0 ? Math.min(...machines.map(m => m.production_count)) : 0);
     const timeStr = new Date().toLocaleTimeString('en-GB', { hour12: false, second: '2-digit', minute: '2-digit' });
     historyRef.current = [
       ...historyRef.current.slice(-59),
@@ -106,6 +106,13 @@ export default function ProductionPage() {
           </div>
         </div>
         <div className="kpi-card">
+          <div className="kpi-label">Active Line WIP</div>
+          <div className="kpi-value">
+            {summary?.total_wip ?? (machines && machines.length > 0 ? Math.max(0, (machines[0]?.production_count ?? 0) - (machines[machines.length - 1]?.production_count ?? 0)) : 0)}
+            <span className="kpi-unit">pcs</span>
+          </div>
+        </div>
+        <div className="kpi-card">
           <div className="kpi-label">Max Line Capacity</div>
           <div className="kpi-value">
             {bottleneck?.max_line_capacity_per_hour ? bottleneck.max_line_capacity_per_hour.toFixed(1) : '—'}<span className="kpi-unit">parts/hr</span>
@@ -134,12 +141,24 @@ export default function ProductionPage() {
             const bDetail = bottleneck?.stations ? bottleneck.stations.find(s => s.machine_id === mid) : undefined;
             const isBinding = bDetail?.is_bottleneck;
             const status = m?.status ?? 'IDLE';
+            const prevMid = i > 0 ? MACHINE_IDS[STATION_ORDER[i - 1]] : null;
+            const prevM = prevMid ? machineMap[prevMid] : null;
+            const wipBuffer = prevM && m ? Math.max(0, prevM.production_count - m.production_count) : 0;
 
             return (
               <div key={station} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                 {i > 0 && (
-                  <div className="flow-connector">
+                  <div
+                    className="flow-connector"
+                    title={wipBuffer > 0 ? `${wipBuffer} WIP parts waiting in buffer` : 'Direct handoff'}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 28 }}
+                  >
                     <ChevronRight size={18} />
+                    {wipBuffer > 0 && (
+                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent-copper, #C47B3B)', marginTop: -2, whiteSpace: 'nowrap' }}>
+                        {wipBuffer} WIP
+                      </span>
+                    )}
                   </div>
                 )}
                 <div

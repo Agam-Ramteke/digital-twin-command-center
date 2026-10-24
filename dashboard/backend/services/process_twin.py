@@ -9,6 +9,8 @@ Implements Sections 4.2, 4.4, and 9 of the research report:
 from __future__ import annotations
 
 from collections import deque
+from contextlib import suppress
+from repositories.twin_repository import TwinRepository
 from datetime import datetime, timezone
 import math
 from threading import RLock
@@ -97,8 +99,9 @@ CANONICAL_EDGES: tuple[DAGEdge, ...] = (
 class ProcessTwinService:
     """Manages the DAG topology, frozen snapshot capture, tokens, and line analytics."""
 
-    def __init__(self, live_twin_service: LiveTwinService, *, max_token_history: int = 1000) -> None:
+    def __init__(self, live_twin_service: LiveTwinService, *, repository: TwinRepository | None = None, max_token_history: int = 1000) -> None:
         self._live_twin_service = live_twin_service
+        self._repository: TwinRepository | None = repository or getattr(live_twin_service, "repository", None)
         self._lock = RLock()
         self._topology = ProcessTopology(
             version="five-station-v1",
@@ -263,6 +266,10 @@ class ProcessTwinService:
             else:
                 self._dispatched_count += 1
 
+        if self._repository is not None:
+            with suppress(Exception):
+                self._repository.save_token(token)
+
         return token
 
     def list_tokens(
@@ -275,6 +282,14 @@ class ProcessTwinService:
         """Return newest-first production tokens matching optional filters."""
         if limit < 1 or limit > 10_000:
             raise ValueError("limit must be between 1 and 10000")
+
+        if self._repository is not None:
+            try:
+                repo_tokens = self._repository.list_tokens(limit=limit, quality=quality, station=station)
+                if repo_tokens:
+                    return repo_tokens
+            except Exception:
+                pass
 
         with self._lock:
             results: list[ProductionToken] = []
@@ -290,7 +305,15 @@ class ProcessTwinService:
 
     def get_token(self, token_id: str) -> ProductionToken | None:
         with self._lock:
-            return self._tokens_by_id.get(token_id)
+            local = self._tokens_by_id.get(token_id)
+            if local is not None:
+                return local
+        if self._repository is not None:
+            try:
+                return self._repository.get_token(token_id)
+            except Exception:
+                pass
+        return None
 
     # ------------------------------------------------------------------
     # Bottleneck Attribution (§9.2)
